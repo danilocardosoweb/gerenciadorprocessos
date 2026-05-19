@@ -1,0 +1,8 @@
+{
+  "name": "IATF Machining Process Map",
+  "description": "Mind map visualization for machining process documentation based on IATF 16949 standards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
