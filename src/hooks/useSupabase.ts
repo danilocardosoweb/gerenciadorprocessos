@@ -92,15 +92,26 @@ export function useSupabase() {
   };
 
   const fetchUsers = async () => {
-    const { data, error } = await supabase.from('app_users').select(`
-      *,
-      role:roles(name)
-    `);
-    if (error) {
-      console.error('Error fetching users:', error);
-      return;
+    try {
+      const { data, error } = await supabase.from('users').select('*');
+      if (error) {
+        console.error('❌ Error fetching users:', error);
+        setUsers([]);
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        console.log('✅ No users found in Supabase');
+        setUsers([]);
+        return;
+      }
+      
+      console.log('✅ Fetched users from Supabase:', data);
+      setUsers(data);
+    } catch (err) {
+      console.error('❌ Exception fetching users:', err);
+      setUsers([]);
     }
-    setUsers(data);
   };
 
   const loadAll = async () => {
