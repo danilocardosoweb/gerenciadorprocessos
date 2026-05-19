@@ -136,147 +136,151 @@ export function WorkInstructionExport({ isOpen, onClose, mapTitle, nodes, edges,
         </div>
 
         {/* Document Content - Printable Area */}
-        <div className="flex-1 overflow-y-auto p-8 print:p-0 print:overflow-visible">
-          <div className="max-w-[210mm] mx-auto print:max-w-none print:mx-0">
+        <div className="flex-1 overflow-y-auto p-8 print:p-0 print:overflow-visible bg-white">
+          <div className="max-w-[210mm] mx-auto print:max-w-none print:mx-0 text-gray-900">
             
             {/* Document Header */}
-            <div className="border-2 border-black p-4 mb-6 print:border-2 print:border-black">
-              <div className="grid grid-cols-3 gap-4 mb-4 border-b-2 border-black pb-4">
+            <div className="border-2 border-gray-900 p-4 mb-6 print:border-2 print:border-gray-900 bg-gray-50">
+              <div className="grid grid-cols-3 gap-4 mb-4 border-b-2 border-gray-900 pb-4">
                 <div className="col-span-2">
-                  <div className="text-xs text-gray-600 mb-1">TÍTULO DO DOCUMENTO</div>
-                  <div className="font-bold text-lg uppercase">{mapTitle}</div>
+                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase tracking-wider">Título do Documento</div>
+                  <div className="font-bold text-xl uppercase text-black">{mapTitle}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-gray-600 mb-1">CÓDIGO</div>
-                  <div className="font-bold">{docCode}</div>
+                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase tracking-wider">Código</div>
+                  <div className="font-bold text-lg text-black">{docCode}</div>
                 </div>
               </div>
               
               <div className="grid grid-cols-4 gap-4 text-sm">
-                <div>
-                  <div className="text-xs text-gray-600">REVISION</div>
-                  <div className="font-bold">Rev. 01</div>
+                <div className="bg-white p-2 rounded border border-gray-300">
+                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Revisão</div>
+                  <div className="font-bold text-black text-base">Rev. 01</div>
                 </div>
-                <div>
-                  <div className="text-xs text-gray-600">DATA</div>
-                  <div className="font-bold">{today}</div>
+                <div className="bg-white p-2 rounded border border-gray-300">
+                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Data</div>
+                  <div className="font-bold text-black text-base">{today}</div>
                 </div>
-                <div>
-                  <div className="text-xs text-gray-600">ELABORADO POR</div>
-                  <div className="font-bold">{currentUser?.name || 'N/A'}</div>
+                <div className="bg-white p-2 rounded border border-gray-300">
+                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Elaborado por</div>
+                  <div className="font-bold text-black text-base truncate">{currentUser?.name || 'N/A'}</div>
                 </div>
-                <div>
-                  <div className="text-xs text-gray-600">APROVADO POR</div>
-                  <div className="font-bold">________________</div>
+                <div className="bg-white p-2 rounded border border-gray-300">
+                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Aprovado por</div>
+                  <div className="font-bold text-gray-500 text-base">________________</div>
                 </div>
               </div>
             </div>
 
             {/* Objective Section */}
             {rootNode && (
-              <div className="mb-6 border-2 border-black p-4 print:border-2 print:border-black">
-                <div className="font-bold text-sm uppercase bg-black text-white px-3 py-1 -mx-4 -mt-4 mb-3 w-fit print:bg-black print:text-white">
+              <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
+                <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
                   1. OBJETIVO
                 </div>
-                <p className="text-sm leading-relaxed">
+                <p className="text-base leading-relaxed text-gray-800">
                   Esta instrução tem por objetivo orientar os colaboradores sobre o procedimento operacional
-                  <strong> "{rootNode.data.label}"</strong>, estabelecendo as etapas necessárias para execução segura e eficiente das atividades.
+                  <strong className="text-black"> "{rootNode.data.label}"</strong>, estabelecendo as etapas necessárias para execução segura e eficiente das atividades.
                 </p>
               </div>
             )}
 
             {/* Scope Section */}
-            <div className="mb-6 border-2 border-black p-4 print:border-2 print:border-black">
-              <div className="font-bold text-sm uppercase bg-black text-white px-3 py-1 -mx-4 -mt-4 mb-3 w-fit print:bg-black print:text-white">
+            <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
+              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
                 2. ESCOPO
               </div>
-              <p className="text-sm leading-relaxed">
-                Esta instrução se aplica a todos os colaboradores envolvidos na operação de <strong>{mapTitle}</strong>,
+              <p className="text-base leading-relaxed text-gray-800">
+                Esta instrução se aplica a todos os colaboradores envolvidos na operação de <strong className="text-black">{mapTitle}</strong>,
                 incluindo operadores, técnicos e supervisores.
               </p>
             </div>
 
             {/* Legend */}
-            <div className="mb-6 border-2 border-black p-4 print:border-2 print:border-black">
-              <div className="font-bold text-sm uppercase bg-black text-white px-3 py-1 -mx-4 -mt-4 mb-3 w-fit print:bg-black print:text-white">
+            <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
+              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
                 3. LEGENDA DOS SÍMBOLOS
               </div>
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-                  <span>Início do processo</span>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
+                  <div className="w-5 h-5 rounded-full bg-blue-600 border-2 border-blue-800 shadow-sm flex-shrink-0"></div>
+                  <span className="font-medium text-gray-900">Início do processo</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-emerald-500 rounded"></div>
-                  <span>Processo/Operação</span>
+                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
+                  <div className="w-5 h-5 bg-emerald-600 rounded border-2 border-emerald-800 shadow-sm flex-shrink-0"></div>
+                  <span className="font-medium text-gray-900">Processo/Operação</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-amber-500"></div>
-                  <span>Decisão/Verificação</span>
+                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
+                  <div className="w-5 h-5 rounded-full bg-amber-500 border-2 border-amber-700 shadow-sm flex-shrink-0"></div>
+                  <span className="font-medium text-gray-900">Decisão/Verificação</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-purple-500 rotate-45"></div>
-                  <span>Documento</span>
+                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
+                  <div className="w-5 h-5 bg-purple-600 rotate-45 border-2 border-purple-800 shadow-sm flex-shrink-0"></div>
+                  <span className="font-medium text-gray-900">Documento</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-red-500 rounded-full"></div>
-                  <span>Alerta/Segurança</span>
+                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
+                  <div className="w-5 h-5 bg-red-600 rounded-full border-2 border-red-800 shadow-sm flex-shrink-0"></div>
+                  <span className="font-medium text-gray-900">Alerta/Segurança</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-gray-500 rounded"></div>
-                  <span>Fim do processo</span>
+                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
+                  <div className="w-5 h-5 bg-gray-700 rounded border-2 border-gray-900 shadow-sm flex-shrink-0"></div>
+                  <span className="font-medium text-gray-900">Fim do processo</span>
                 </div>
               </div>
             </div>
 
             {/* Procedure Steps */}
-            <div className="mb-6 border-2 border-black p-4 print:border-2 print:border-black">
-              <div className="font-bold text-sm uppercase bg-black text-white px-3 py-1 -mx-4 -mt-4 mb-4 w-fit print:bg-black print:text-white">
+            <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
+              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
                 4. DESENVOLVIMENTO DA OPERAÇÃO
               </div>
 
               {phases.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
+                <div className="text-center text-gray-600 py-8 font-medium">
                   Nenhuma etapa definida no mapa mental
                 </div>
               ) : (
                 <div className="space-y-6">
                   {phases.map((phase, phaseIndex) => (
-                    <div key={phaseIndex} className="border border-gray-400 p-3 print:border print:border-gray-400">
+                    <div key={phaseIndex} className="border-2 border-gray-400 p-3 print:border-2 print:border-gray-400 bg-gray-50">
                       {/* Phase Header */}
-                      <div className="font-bold text-sm uppercase bg-gray-200 px-3 py-2 -mx-3 -mt-3 mb-3 border-b border-gray-400 print:bg-gray-200 print:border-b">
+                      <div className="font-bold text-base uppercase bg-gray-300 px-3 py-2 -mx-3 -mt-3 mb-3 border-b-2 border-gray-400 print:bg-gray-300 print:border-b-2 text-gray-900">
                         FASE {phaseIndex + 1}: {phase.title}
                       </div>
 
                       {/* Steps Table */}
-                      <table className="w-full text-sm border-collapse">
+                      <table className="w-full text-sm border-collapse border-2 border-gray-600">
                         <thead>
-                          <tr className="border-b-2 border-black bg-gray-100 print:bg-gray-100">
-                            <th className="text-left p-2 border-r border-gray-400 w-16">ETAPA</th>
-                            <th className="text-left p-2 border-r border-gray-400">DESCRIÇÃO DA ATIVIDADE</th>
-                            <th className="text-left p-2">OBSERVAÇÕES / PONTOS DE ATENÇÃO</th>
+                          <tr className="border-b-2 border-gray-600 bg-gray-200 print:bg-gray-200">
+                            <th className="text-left p-3 border-r-2 border-gray-600 w-20 font-bold text-gray-900">ETAPA</th>
+                            <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">DESCRIÇÃO DA ATIVIDADE</th>
+                            <th className="text-left p-3 font-bold text-gray-900">OBSERVAÇÕES</th>
                           </tr>
                         </thead>
                         <tbody>
                           {phase.steps.map((step, stepIndex) => (
-                            <tr key={stepIndex} className="border-b border-gray-300">
-                              <td className="p-2 border-r border-gray-300 align-top font-mono text-xs">
+                            <tr key={stepIndex} className={stepIndex % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                              <td className="p-3 border-r-2 border-gray-400 align-top font-mono text-sm font-bold text-gray-800">
                                 {step.stepNumber}
                               </td>
-                              <td className="p-2 border-r border-gray-300 align-top">
-                                <div className="font-semibold">{step.node.data.label}</div>
+                              <td className="p-3 border-r-2 border-gray-400 align-top">
+                                <div className="font-bold text-gray-900 text-sm">{step.node.data.label}</div>
                                 {step.node.data.description && (
-                                  <div className="text-gray-600 mt-1 text-xs">
+                                  <div className="text-gray-700 mt-1 text-xs leading-relaxed">
                                     {step.node.data.description}
                                   </div>
                                 )}
                               </td>
-                              <td className="p-2 align-top">
+                              <td className="p-3 align-top">
                                 {step.node.data.nodeType === 'decision' && (
-                                  <span className="text-amber-600 text-xs">⚠️ Verificar condição antes de prosseguir</span>
+                                  <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold bg-amber-100 px-2 py-1 rounded">
+                                    ⚠️ Verificar condição
+                                  </span>
                                 )}
                                 {step.node.data.nodeType === 'document' && (
-                                  <span className="text-blue-600 text-xs">📄 Gerar documentação</span>
+                                  <span className="inline-flex items-center gap-1 text-blue-700 text-xs font-bold bg-blue-100 px-2 py-1 rounded">
+                                    📄 Gerar documentação
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -290,53 +294,53 @@ export function WorkInstructionExport({ isOpen, onClose, mapTitle, nodes, edges,
             </div>
 
             {/* Safety Warnings */}
-            <div className="mb-6 border-2 border-red-500 p-4 print:border-2 print:border-red-500">
-              <div className="font-bold text-sm uppercase bg-red-500 text-white px-3 py-1 -mx-4 -mt-4 mb-3 w-fit print:bg-red-500 print:text-white">
+            <div className="mb-6 border-2 border-red-600 p-4 print:border-2 print:border-red-600 bg-red-50">
+              <div className="font-bold text-base uppercase bg-red-600 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-red-600 print:text-white shadow-sm flex items-center gap-2">
                 ⚠️ OBSERVAÇÕES DE SEGURANÇA
               </div>
-              <ul className="text-sm space-y-2 list-disc list-inside">
-                <li>Utilizar sempre os EPIs adequados (óculos, luvas, protetor auricular conforme necessário)</li>
-                <li>Verificar condições das máquinas e equipamentos antes de iniciar</li>
-                <li>Em caso de dúvida, consultar o supervisor antes de prosseguir</li>
-                <li>Manter a área de trabalho limpa e organizada</li>
+              <ul className="text-base space-y-3 list-disc list-inside text-gray-800">
+                <li className="font-medium">Utilizar sempre os EPIs adequados (óculos, luvas, protetor auricular conforme necessário)</li>
+                <li className="font-medium">Verificar condições das máquinas e equipamentos antes de iniciar</li>
+                <li className="font-medium">Em caso de dúvida, consultar o supervisor antes de prosseguir</li>
+                <li className="font-medium">Manter a área de trabalho limpa e organizada</li>
               </ul>
             </div>
 
             {/* Approval Signatures */}
-            <div className="border-2 border-black p-4 print:border-2 print:border-black">
-              <div className="font-bold text-sm uppercase bg-black text-white px-3 py-1 -mx-4 -mt-4 mb-4 w-fit print:bg-black print:text-white">
+            <div className="border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
+              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
                 5. CONTROLE DE REVISÕES
               </div>
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-base border-collapse border-2 border-gray-600">
                 <thead>
-                  <tr className="border-b-2 border-black bg-gray-100 print:bg-gray-100">
-                    <th className="text-left p-2 border-r border-gray-400">REVISÃO</th>
-                    <th className="text-left p-2 border-r border-gray-400">DATA</th>
-                    <th className="text-left p-2 border-r border-gray-400">DESCRIÇÃO DA MUDANÇA</th>
-                    <th className="text-left p-2">RESPONSÁVEL</th>
+                  <tr className="border-b-2 border-gray-600 bg-gray-200 print:bg-gray-200">
+                    <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">REV.</th>
+                    <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">DATA</th>
+                    <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">DESCRIÇÃO</th>
+                    <th className="text-left p-3 font-bold text-gray-900">RESPONSÁVEL</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-gray-300">
-                    <td className="p-2 border-r border-gray-300">01</td>
-                    <td className="p-2 border-r border-gray-300">{today}</td>
-                    <td className="p-2 border-r border-gray-300">Emissão inicial</td>
-                    <td className="p-2">{currentUser?.name || 'N/A'}</td>
+                  <tr className="bg-white">
+                    <td className="p-3 border-r-2 border-gray-400 font-bold">01</td>
+                    <td className="p-3 border-r-2 border-gray-400">{today}</td>
+                    <td className="p-3 border-r-2 border-gray-400">Emissão inicial</td>
+                    <td className="p-3 font-medium">{currentUser?.name || 'N/A'}</td>
                   </tr>
-                  <tr className="border-b border-gray-300">
-                    <td className="p-2 border-r border-gray-300">&nbsp;</td>
-                    <td className="p-2 border-r border-gray-300">&nbsp;</td>
-                    <td className="p-2 border-r border-gray-300">&nbsp;</td>
-                    <td className="p-2">&nbsp;</td>
+                  <tr className="bg-gray-50">
+                    <td className="p-3 border-r-2 border-gray-400">&nbsp;</td>
+                    <td className="p-3 border-r-2 border-gray-400">&nbsp;</td>
+                    <td className="p-3 border-r-2 border-gray-400">&nbsp;</td>
+                    <td className="p-3">&nbsp;</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
             {/* Document Footer */}
-            <div className="mt-6 pt-4 border-t-2 border-black text-center text-xs text-gray-500 print:border-t-2">
-              <p>Documento gerado automaticamente pelo sistema TecnoMapper</p>
-              <p>{today} - {currentUser?.email || 'sistema'}</p>
+            <div className="mt-6 pt-4 border-t-2 border-gray-400 text-center text-sm text-gray-600 print:border-t-2">
+              <p className="font-medium">Documento gerado automaticamente pelo sistema TecnoMapper</p>
+              <p className="text-xs mt-1">{today} • {currentUser?.email || 'sistema'}</p>
             </div>
 
           </div>
