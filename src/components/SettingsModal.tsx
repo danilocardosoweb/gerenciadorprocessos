@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Users, Shield, Settings, Plus, Search, Check, ChevronRight, Edit2, Trash2, ArrowLeft, Save, FileText, Download, Trash, Filter, ClipboardList, Building2, Eye, Folder } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Preferences } from '../hooks/usePreferences';
 import { useAuditLog } from '../hooks/useAuditLog';
+import { useUsers } from '../hooks/useUsers';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -40,11 +41,11 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   const [auditFilter, setAuditFilter] = useState<'' | 'auth' | 'config' | 'data' | 'security' | 'system'>('');
   const filteredLogs = auditFilter ? filterLogs(auditFilter) : logs;
   
-  const [users, setUsers] = useState<User[]>([
-    { id: 1, name: 'Danilo Cardoso', email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', role: 'Administrador', department: 'PCP', status: 'Ativo' },
-    { id: 2, name: 'João Silva', email: 'joao.silva@exemplo.com', password: '123456', role: 'Editor', department: 'Produção', status: 'Ativo' },
-    { id: 3, name: 'Maria Souza', email: 'maria.souza@exemplo.com', password: '123456', role: 'Editor', department: 'Qualidade', status: 'Ativo' },
-  ]);
+  // Use the useUsers hook for Supabase integration
+  const { users, departments: dbDepartments, loading: usersLoading, error: usersError, createUser, updateUser, deleteUser, fetchUsers } = useUsers();
+  
+  // Local state for departments (can be managed separately or synced with DB)
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   const [roles, setRoles] = useState<Role[]>([
     { id: 1, name: 'Administrador', desc: 'Acesso total ao sistema, configurações e mapas.', users: 1 },
@@ -52,19 +53,19 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     { id: 3, name: 'Visualizador', desc: 'Apenas visualiza mapas e documentos aprovados.', users: 0 },
   ]);
 
-  const [departments, setDepartments] = useState<Department[]>([
-    { id: '1', name: 'Diretoria', description: 'Gestão e direção estratégica', color: '#8b5cf6', icon: 'crown', isDefault: true },
-    { id: '2', name: 'Comercial', description: 'Vendas e atendimento ao cliente', color: '#10b981', icon: 'shopping-cart', isDefault: true },
-    { id: '3', name: 'Qualidade', description: 'Controle de qualidade e certificações', color: '#f59e0b', icon: 'shield-check', isDefault: true },
-    { id: '4', name: 'PCP', description: 'Planejamento e Controle da Produção', color: '#3b82f6', icon: 'calendar-clock', isDefault: true },
-    { id: '5', name: 'Produção', description: 'Operações de fabricação', color: '#ef4444', icon: 'factory', isDefault: true },
-    { id: '6', name: 'Manutenção', description: 'Manutenção de equipamentos', color: '#6b7280', icon: 'wrench', isDefault: true },
-    { id: '7', name: 'Embalagem', description: 'Processos de embalagem', color: '#84cc16', icon: 'package', isDefault: true },
-    { id: '8', name: 'Expedição', description: 'Logística de saída', color: '#06b6d4', icon: 'truck', isDefault: true },
-    { id: '9', name: 'Alúnica', description: 'Setor de alumínio', color: '#a855f7', icon: 'metal', isDefault: true },
-    { id: '10', name: 'Zincolor', description: 'Setor de zinco colorido', color: '#f97316', icon: 'palette', isDefault: true },
-    { id: '11', name: 'Fixxar', description: 'Setor Fixxar', color: '#ec4899', icon: 'screwdriver', isDefault: true },
-  ]);
+  // Sync departments from DB with local state
+  useEffect(() => {
+    if (dbDepartments.length > 0) {
+      setDepartments(dbDepartments.map(d => ({
+        id: d.id,
+        name: d.name,
+        description: d.description || '',
+        color: d.color,
+        icon: d.icon,
+        isDefault: false // You can add this field to DB later if needed
+      })));
+    }
+  }, [dbDepartments]);
 
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [newDepartment, setNewDepartment] = useState<Partial<Department>>({ name: '', description: '', color: '#3b82f6', icon: 'building', isDefault: false });
@@ -126,36 +127,52 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     setActiveView('list');
   };
 
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     if (!userName.trim() || !userEmail.trim()) return;
 
+    const userData = {
+      name: userName,
+      email: userEmail,
+      role: userRole,
+      department: userDepartment,
+      status: userStatus,
+      password: userPassword
+    };
+
+    let result;
     if (activeView === 'edit_user' && editingId) {
-      setUsers(prev => prev.map(u => u.id === editingId ? { ...u, name: userName, email: userEmail, role: userRole, department: userDepartment, status: userStatus, ...(userPassword && { password: userPassword }) } : u));
+      result = await updateUser(editingId.toString(), userData);
     } else {
-      const newUser: User = { id: Date.now(), name: userName, email: userEmail, password: userPassword, role: userRole, department: userDepartment, status: userStatus };
-      setUsers(prev => [...prev, newUser]);
-      // Update role count
-      setRoles(prev => prev.map(r => r.name === userRole ? { ...r, users: r.users + 1 } : r));
+      result = await createUser(userData);
     }
-    setActiveView('list');
-    resetUserForm();
+
+    if (result.success) {
+      setActiveView('list');
+      resetUserForm();
+    } else {
+      alert('Erro ao salvar usuário: ' + result.error);
+    }
   };
 
-  const handleDeleteUser = (id: number, roleName: string) => {
+  const handleDeleteUser = async (id: string, roleName: string) => {
     if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá REMOVER este usuário permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
-      setUsers(prev => prev.filter(u => u.id !== id));
-      setRoles(prev => prev.map(r => r.name === roleName ? { ...r, users: Math.max(0, r.users - 1) } : r));
+      const result = await deleteUser(id.toString());
+      if (result.success) {
+        setRoles(prev => prev.map(r => r.name === roleName ? { ...r, users: Math.max(0, r.users - 1) } : r));
+      } else {
+        alert('Erro ao excluir usuário: ' + result.error);
+      }
     }
   };
 
-  const handleEditUser = (u: User) => {
+  const handleEditUser = (u: any) => {
     setUserName(u.name);
     setUserEmail(u.email);
     setUserPassword('');
     setUserRole(u.role);
     setUserDepartment(u.department || '');
     setUserStatus(u.status);
-    setEditingId(u.id);
+    setEditingId(parseInt(u.id) || Date.now());
     setActiveView('edit_user');
   };
 
@@ -163,11 +180,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     if (!roleName.trim() || !roleDesc.trim()) return;
 
     if (activeView === 'edit_role' && editingId) {
-      // Update users who had this role if name changed? Let's keep it simple and just update the role info.
-      const oldRole = roles.find(r => r.id === editingId);
-      if (oldRole && oldRole.name !== roleName) {
-        setUsers(users.map(u => u.role === oldRole.name ? { ...u, role: roleName } : u));
-      }
+      // Update role info only - user roles are managed separately in Supabase
       setRoles(roles.map(r => r.id === editingId ? { ...r, name: roleName, desc: roleDesc } : r));
     } else {
       const newRole: Role = { id: Date.now(), name: roleName, desc: roleDesc, users: 0 };
