@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Users, Shield, Settings, Plus, Search, Check, ChevronRight, Edit2, Trash2, ArrowLeft, Save, FileText, Download, Trash, Filter, ClipboardList } from 'lucide-react';
+import { X, Users, Shield, Settings, Plus, Search, Check, ChevronRight, Edit2, Trash2, ArrowLeft, Save, FileText, Download, Trash, Filter, ClipboardList, Building2, Eye, Folder } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Preferences } from '../hooks/usePreferences';
 import { useAuditLog } from '../hooks/useAuditLog';
@@ -25,12 +25,14 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
   );
 }
 
-type User = { id: number; name: string; email: string; password?: string; role: string; status: 'Ativo' | 'Inativo' };
+type User = { id: number; name: string; email: string; password?: string; role: string; department?: string; status: 'Ativo' | 'Inativo' };
 type Role = { id: number; name: string; desc: string; users: number };
 
+type Department = { id: string; name: string; description: string; color: string; icon: string; isDefault: boolean };
+
 export function SettingsModal({ onClose, preferences: externalPreferences, setPreferences: externalSetPreferences, currentUser, enableAuditLog }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'preferences' | 'audit'>('users');
-  const [activeView, setActiveView] = useState<'list' | 'add_user' | 'edit_user' | 'add_role' | 'edit_role'>('list');
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'departments' | 'preferences' | 'audit'>('users');
+  const [activeView, setActiveView] = useState<'list' | 'add_user' | 'edit_user' | 'add_role' | 'edit_role' | 'add_department' | 'edit_department'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Audit Log
@@ -39,9 +41,9 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   const filteredLogs = auditFilter ? filterLogs(auditFilter) : logs;
   
   const [users, setUsers] = useState<User[]>([
-    { id: 1, name: 'Danilo Cardoso', email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', role: 'Administrador', status: 'Ativo' },
-    { id: 2, name: 'João Silva', email: 'joao.silva@exemplo.com', password: '123456', role: 'Editor', status: 'Ativo' },
-    { id: 3, name: 'Maria Souza', email: 'maria.souza@exemplo.com', password: '123456', role: 'Editor', status: 'Ativo' },
+    { id: 1, name: 'Danilo Cardoso', email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', role: 'Administrador', department: 'PCP', status: 'Ativo' },
+    { id: 2, name: 'João Silva', email: 'joao.silva@exemplo.com', password: '123456', role: 'Editor', department: 'Produção', status: 'Ativo' },
+    { id: 3, name: 'Maria Souza', email: 'maria.souza@exemplo.com', password: '123456', role: 'Editor', department: 'Qualidade', status: 'Ativo' },
   ]);
 
   const [roles, setRoles] = useState<Role[]>([
@@ -49,6 +51,23 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     { id: 2, name: 'Editor', desc: 'Pode criar e editar mapas e documentos, mas não gerencia usuários.', users: 2 },
     { id: 3, name: 'Visualizador', desc: 'Apenas visualiza mapas e documentos aprovados.', users: 0 },
   ]);
+
+  const [departments, setDepartments] = useState<Department[]>([
+    { id: '1', name: 'Diretoria', description: 'Gestão e direção estratégica', color: '#8b5cf6', icon: 'crown', isDefault: true },
+    { id: '2', name: 'Comercial', description: 'Vendas e atendimento ao cliente', color: '#10b981', icon: 'shopping-cart', isDefault: true },
+    { id: '3', name: 'Qualidade', description: 'Controle de qualidade e certificações', color: '#f59e0b', icon: 'shield-check', isDefault: true },
+    { id: '4', name: 'PCP', description: 'Planejamento e Controle da Produção', color: '#3b82f6', icon: 'calendar-clock', isDefault: true },
+    { id: '5', name: 'Produção', description: 'Operações de fabricação', color: '#ef4444', icon: 'factory', isDefault: true },
+    { id: '6', name: 'Manutenção', description: 'Manutenção de equipamentos', color: '#6b7280', icon: 'wrench', isDefault: true },
+    { id: '7', name: 'Embalagem', description: 'Processos de embalagem', color: '#84cc16', icon: 'package', isDefault: true },
+    { id: '8', name: 'Expedição', description: 'Logística de saída', color: '#06b6d4', icon: 'truck', isDefault: true },
+    { id: '9', name: 'Alúnica', description: 'Setor de alumínio', color: '#a855f7', icon: 'metal', isDefault: true },
+    { id: '10', name: 'Zincolor', description: 'Setor de zinco colorido', color: '#f97316', icon: 'palette', isDefault: true },
+    { id: '11', name: 'Fixxar', description: 'Setor Fixxar', color: '#ec4899', icon: 'screwdriver', isDefault: true },
+  ]);
+
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [newDepartment, setNewDepartment] = useState<Partial<Department>>({ name: '', description: '', color: '#3b82f6', icon: 'building', isDefault: false });
 
   // Use external preferences if provided, otherwise use local state
   const [localPreferences, setLocalPreferences] = useState<Preferences>({
@@ -80,6 +99,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userRole, setUserRole] = useState('Editor');
+  const [userDepartment, setUserDepartment] = useState('');
   const [userStatus, setUserStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
 
   const [roleName, setRoleName] = useState('');
@@ -90,6 +110,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     setUserEmail('');
     setUserPassword('');
     setUserRole('Editor');
+    setUserDepartment('');
     setUserStatus('Ativo');
     setEditingId(null);
   };
@@ -100,7 +121,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     setEditingId(null);
   };
 
-  const handleTabChange = (tab: 'users' | 'roles' | 'preferences' | 'audit') => {
+  const handleTabChange = (tab: 'users' | 'roles' | 'departments' | 'preferences' | 'audit') => {
     setActiveTab(tab);
     setActiveView('list');
   };
@@ -109,9 +130,9 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     if (!userName.trim() || !userEmail.trim()) return;
 
     if (activeView === 'edit_user' && editingId) {
-      setUsers(prev => prev.map(u => u.id === editingId ? { ...u, name: userName, email: userEmail, role: userRole, status: userStatus, ...(userPassword && { password: userPassword }) } : u));
+      setUsers(prev => prev.map(u => u.id === editingId ? { ...u, name: userName, email: userEmail, role: userRole, department: userDepartment, status: userStatus, ...(userPassword && { password: userPassword }) } : u));
     } else {
-      const newUser: User = { id: Date.now(), name: userName, email: userEmail, password: userPassword, role: userRole, status: userStatus };
+      const newUser: User = { id: Date.now(), name: userName, email: userEmail, password: userPassword, role: userRole, department: userDepartment, status: userStatus };
       setUsers(prev => [...prev, newUser]);
       // Update role count
       setRoles(prev => prev.map(r => r.name === userRole ? { ...r, users: r.users + 1 } : r));
@@ -121,7 +142,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   };
 
   const handleDeleteUser = (id: number, roleName: string) => {
-    if (confirm('Tem certeza que deseja remover este usuário?')) {
+    if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá REMOVER este usuário permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
       setUsers(prev => prev.filter(u => u.id !== id));
       setRoles(prev => prev.map(r => r.name === roleName ? { ...r, users: Math.max(0, r.users - 1) } : r));
     }
@@ -132,6 +153,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     setUserEmail(u.email);
     setUserPassword('');
     setUserRole(u.role);
+    setUserDepartment(u.department || '');
     setUserStatus(u.status);
     setEditingId(u.id);
     setActiveView('edit_user');
@@ -156,7 +178,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   };
 
   const handleDeleteRole = (id: number) => {
-    if (confirm('Tem certeza que deseja remover este nível de acesso?')) {
+    if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá REMOVER este nível de acesso.\nUsuários com este nível poderão perder permissões.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
       setRoles(roles.filter(r => r.id !== id));
     }
   };
@@ -209,6 +231,13 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
             >
               <Shield size={18} />
               Níveis de Acesso
+            </button>
+            <button 
+              onClick={() => handleTabChange('departments')}
+              className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'departments' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
+            >
+              <Building2 size={18} />
+              Departamentos
             </button>
             <button 
               onClick={() => handleTabChange('preferences')}
@@ -281,6 +310,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           <tr>
                             <th className="px-6 py-4 border-b border-white/5">Nome</th>
                             <th className="px-6 py-4 border-b border-white/5">Acesso</th>
+                            <th className="px-6 py-4 border-b border-white/5">Departamento</th>
                             <th className="px-6 py-4 border-b border-white/5">Status</th>
                             <th className="px-6 py-4 border-b border-white/5 text-right">Ações</th>
                           </tr>
@@ -288,7 +318,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                         <tbody>
                           {filteredUsers.length === 0 && (
                             <tr>
-                              <td colSpan={4} className="px-6 py-8 text-center text-slate-500 border-b border-white/5">
+                              <td colSpan={5} className="px-6 py-8 text-center text-slate-500 border-b border-white/5">
                                 Nenhum usuário encontrado.
                               </td>
                             </tr>
@@ -302,6 +332,11 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                               <td className="px-6 py-4">
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                   {u.role}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                  {u.department || 'Não atribuído'}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
@@ -399,6 +434,22 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           >
                             {roles.map(r => (
                               <option key={r.id} value={r.name} className="bg-slate-800 text-white">{r.name}</option>
+                            ))}
+                          </select>
+                          <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none rotate-90" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-300 mb-2">Departamento</label>
+                        <div className="relative">
+                          <select 
+                            value={userDepartment}
+                            onChange={(e) => setUserDepartment(e.target.value)}
+                            className="w-full appearance-none bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+                          >
+                            <option value="" className="bg-slate-800 text-white">Selecione...</option>
+                            {departments.map(d => (
+                              <option key={d.id} value={d.name} className="bg-slate-800 text-white">{d.name}</option>
                             ))}
                           </select>
                           <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none rotate-90" />
@@ -820,6 +871,217 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                       </pre>
                     </div>
                   )}
+                </motion.div>
+              )}
+
+              {/* Departments Tab */}
+              {activeTab === 'departments' && activeView === 'list' && (
+                <motion.div 
+                  key="departments-list"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-8"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                        <Building2 className="text-blue-400" size={28} />
+                        Departamentos
+                      </h3>
+                      <p className="text-slate-400 mt-1">Gerencie os departamentos e setores da organização</p>
+                    </div>
+                    <button 
+                      onClick={() => setActiveView('add_department')}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium flex items-center gap-2 transition-colors shadow-lg shadow-blue-600/20"
+                    >
+                      <Plus size={18} />
+                      Novo Departamento
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {departments.map((dept) => (
+                      <motion.div
+                        key={dept.id}
+                        layout
+                        className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-colors group"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div 
+                            className="w-12 h-12 rounded-xl flex items-center justify-center"
+                            style={{ backgroundColor: dept.color + '20' }}
+                          >
+                            <Building2 size={24} style={{ color: dept.color }} />
+                          </div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => {
+                                setEditingDepartment(dept);
+                                setNewDepartment(dept);
+                                setActiveView('edit_department');
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            {!dept.isDefault && (
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Tem certeza que deseja excluir o departamento "${dept.name}"?`)) {
+                                    setDepartments(departments.filter(d => d.id !== dept.id));
+                                  }
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <h4 className="font-semibold text-white mb-1">{dept.name}</h4>
+                        <p className="text-sm text-slate-400 line-clamp-2">{dept.description}</p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <span 
+                            className="text-xs px-2 py-1 rounded-full font-medium"
+                            style={{ backgroundColor: dept.color + '30', color: dept.color }}
+                          >
+                            {dept.color}
+                          </span>
+                          {dept.isDefault && (
+                            <span className="text-xs px-2 py-1 rounded-full bg-slate-600/30 text-slate-400">
+                              Padrão
+                            </span>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Add/Edit Department Form */}
+              {(activeTab === 'departments' && (activeView === 'add_department' || activeView === 'edit_department')) && (
+                <motion.div 
+                  key="department-form"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="max-w-lg"
+                >
+                  <button 
+                    onClick={() => {
+                      setActiveView('list');
+                      setEditingDepartment(null);
+                      setNewDepartment({ name: '', description: '', color: '#3b82f6', icon: 'building', isDefault: false });
+                    }}
+                    className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 transition-colors"
+                  >
+                    <ArrowLeft size={18} />
+                    Voltar para lista
+                  </button>
+
+                  <h3 className="text-2xl font-bold text-white mb-6">
+                    {activeView === 'edit_department' ? 'Editar Departamento' : 'Novo Departamento'}
+                  </h3>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Nome do Departamento</label>
+                      <input
+                        type="text"
+                        value={newDepartment.name}
+                        onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
+                        placeholder="Ex: Produção"
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Descrição</label>
+                      <textarea
+                        value={newDepartment.description}
+                        onChange={(e) => setNewDepartment({ ...newDepartment, description: e.target.value })}
+                        placeholder="Descreva as responsabilidades do departamento..."
+                        rows={3}
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Cor de Identificação</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={newDepartment.color}
+                          onChange={(e) => setNewDepartment({ ...newDepartment, color: e.target.value })}
+                          className="w-12 h-12 rounded-xl cursor-pointer bg-transparent border-0"
+                        />
+                        <input
+                          type="text"
+                          value={newDepartment.color}
+                          onChange={(e) => setNewDepartment({ ...newDepartment, color: e.target.value })}
+                          placeholder="#3b82f6"
+                          className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-mono uppercase focus:outline-none focus:border-blue-500/50"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 pt-4">
+                      <input
+                        type="checkbox"
+                        id="isDefault"
+                        checked={newDepartment.isDefault}
+                        onChange={(e) => setNewDepartment({ ...newDepartment, isDefault: e.target.checked })}
+                        className="w-5 h-5 rounded border-white/20 bg-white/5 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label htmlFor="isDefault" className="text-sm text-slate-300">
+                        Departamento padrão do sistema
+                      </label>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={() => {
+                          setActiveView('list');
+                          setEditingDepartment(null);
+                          setNewDepartment({ name: '', description: '', color: '#3b82f6', icon: 'building', isDefault: false });
+                        }}
+                        className="flex-1 px-4 py-3 border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!newDepartment.name?.trim()) return;
+                          
+                          if (activeView === 'edit_department' && editingDepartment) {
+                            setDepartments(departments.map(d => d.id === editingDepartment.id ? { ...d, ...newDepartment } as Department : d));
+                          } else {
+                            const newDept: Department = {
+                              id: Date.now().toString(),
+                              name: newDepartment.name || '',
+                              description: newDepartment.description || '',
+                              color: newDepartment.color || '#3b82f6',
+                              icon: newDepartment.icon || 'building',
+                              isDefault: newDepartment.isDefault || false
+                            };
+                            setDepartments([...departments, newDept]);
+                          }
+                          
+                          setActiveView('list');
+                          setEditingDepartment(null);
+                          setNewDepartment({ name: '', description: '', color: '#3b82f6', icon: 'building', isDefault: false });
+                        }}
+                        disabled={!newDepartment.name?.trim()}
+                        className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"
+                      >
+                        {activeView === 'edit_department' ? 'Salvar Alterações' : 'Criar Departamento'}
+                      </button>
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
