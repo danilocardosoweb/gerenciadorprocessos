@@ -38,6 +38,7 @@ function formatDate(dateStr: string): string {
 import { SettingsModal } from './SettingsModal';
 import { NewItemModal } from './NewItemModal';
 import { AiImportModal } from './AiImportModal';
+import { DataExportImport } from './DataExportImport';
 import { DocumentManager, DocumentItem } from './DocumentManager';
 import { GlobalMetrics } from './GlobalMetrics';
 import { useSupabase } from '../hooks/useSupabase';
@@ -49,7 +50,7 @@ import { SyncStatus } from './SyncStatus';
 import { useTheme } from '../hooks/useTheme';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { MobileLayout, useIsMobile } from './MobileLayout';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Database } from 'lucide-react';
 
 export interface ProcessItem {
   id: string;
@@ -202,6 +203,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
   const [modalInitialType, setModalInitialType] = useState<'map' | 'folder' | 'markdown' | 'sector3d'>('map');
   const [isAiImportOpen, setIsAiImportOpen] = useState(false);
+  const [isExportImportOpen, setIsExportImportOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   
   // Context Menu state
@@ -353,6 +355,13 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             title="Configurações e Acessos"
           >
             <Settings2 size={24} />
+          </button>
+          <button 
+            onClick={() => setIsExportImportOpen(true)}
+            className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all text-white border border-white/20"
+            title="Exportar/Importar Dados"
+          >
+            <Database size={24} />
           </button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
@@ -685,6 +694,15 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             }}
           />
         )}
+        <DataExportImport 
+          isOpen={isExportImportOpen}
+          onClose={() => setIsExportImportOpen(false)}
+          items={items}
+          documents={documents}
+          onImportSuccess={() => {
+            refreshData();
+          }}
+        />
         {isNewItemOpen && (
           <NewItemModal 
             onClose={() => setIsNewItemOpen(false)} 
