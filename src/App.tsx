@@ -18,7 +18,7 @@ import '@xyflow/react/dist/style.css';
 import { initialNodes, initialEdges } from './data';
 import { getLayoutedElements } from './lib/layout';
 import { MindMapNode } from './components/MindMapNode';
-import { Settings2, Download, Plus, Play, ChevronRight, ChevronLeft, Square, Target, ArrowLeft, Search, X, Image as ImageIcon, FileCode, Camera, Save, History, RotateCcw, Trash2 } from 'lucide-react';
+import { Settings2, Download, Plus, Play, ChevronRight, ChevronLeft, Square, Target, ArrowLeft, Search, X, Image as ImageIcon, FileCode, Camera, Save, History, RotateCcw, Trash2, FileText } from 'lucide-react';
 import { NodeModal, NodeDetails } from './components/NodeModal';
 import { AddNodeModal } from './components/AddNodeModal';
 import { Node } from '@xyflow/react';
@@ -35,6 +35,7 @@ import { useToast, ToastContainer } from './components/Toast';
 import { ConfirmModal } from './components/ConfirmModal';
 import { useConfirm } from './hooks/useConfirm';
 import { useKeyboardShortcuts, useAppShortcuts } from './hooks/useKeyboardShortcuts';
+import { WorkInstructionExport } from './components/WorkInstructionExport';
 
 const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   initialNodes,
@@ -167,6 +168,9 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
   // Export Menu State
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Work Instruction Export Modal
+  const [isWorkInstructionOpen, setIsWorkInstructionOpen] = useState(false);
 
   // Export functions - REQUIRES: npm install html-to-image
   // Uncomment after installing dependency
@@ -564,6 +568,19 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                       <div>
                         <div className="font-medium text-sm">Exportar SVG</div>
                         <div className="text-xs text-slate-500">Vetor escalável</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsWorkInstructionOpen(true);
+                        setIsExportMenuOpen(false);
+                      }}
+                      className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-slate-300 hover:text-white border-t border-white/5"
+                    >
+                      <FileText size={18} className="text-amber-400" />
+                      <div>
+                        <div className="font-medium text-sm">Folha de Instruções</div>
+                        <div className="text-xs text-slate-500">PDF para impressão</div>
                       </div>
                     </button>
                   </div>
@@ -980,6 +997,16 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
 
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      
+      {/* Work Instruction Export Modal */}
+      <WorkInstructionExport
+        isOpen={isWorkInstructionOpen}
+        onClose={() => setIsWorkInstructionOpen(false)}
+        mapTitle={mapTitle}
+        nodes={nodes}
+        edges={edges}
+        currentUser={currentUser}
+      />
     </div>
   );
 }
