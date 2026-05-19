@@ -575,7 +575,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           </div>
                           <Toggle checked={preferences.requireApproval} onChange={() => {
                             setPreferences({ requireApproval: !preferences.requireApproval });
-                            if (enableAuditLog) console.log(`[AUDIT] ${currentUser?.name} alterou: Aprovação Obrigatória = ${!preferences.requireApproval}`);
+                            if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Aprovação Obrigatória = ${!preferences.requireApproval}`);
                           }} />
                         </div>
                         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center justify-between">
@@ -585,7 +585,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           </div>
                           <Toggle checked={preferences.autoSave} onChange={() => {
                             setPreferences({ autoSave: !preferences.autoSave });
-                            if (enableAuditLog) console.log(`[AUDIT] ${currentUser?.name} alterou: Salvamento Automático = ${!preferences.autoSave}`);
+                            if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Salvamento Automático = ${!preferences.autoSave}`);
                           }} />
                         </div>
                         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center justify-between">
@@ -595,7 +595,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           </div>
                           <Toggle checked={preferences.enableAuditLog} onChange={() => {
                             setPreferences({ enableAuditLog: !preferences.enableAuditLog });
-                            console.log(`[AUDIT] ${currentUser?.name} alterou: Log de Auditoria = ${!preferences.enableAuditLog}`);
+                            if (currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Log de Auditoria = ${!preferences.enableAuditLog}`);
                           }} />
                         </div>
                       </div>
@@ -611,7 +611,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                         </div>
                         <Toggle checked={preferences.emailNotifications} onChange={() => {
                           setPreferences({ emailNotifications: !preferences.emailNotifications });
-                          if (enableAuditLog) console.log(`[AUDIT] ${currentUser?.name} alterou: Notificações por Email = ${!preferences.emailNotifications}`);
+                          if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Notificações por Email = ${!preferences.emailNotifications}`);
                         }} />
                       </div>
                     </div>
@@ -630,7 +630,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                               value={preferences.defaultMapLayout}
                               onChange={(e) => {
                                 setPreferences({ defaultMapLayout: e.target.value as Preferences['defaultMapLayout'] });
-                                if (enableAuditLog) console.log(`[AUDIT] ${currentUser?.name} alterou: Layout Padrão = ${e.target.value}`);
+                                if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Layout Padrão = ${e.target.value}`);
                               }}
                               className="bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50"
                             >
@@ -657,7 +657,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                             value={preferences.sessionTimeout}
                             onChange={(e) => {
                               setPreferences({ sessionTimeout: parseInt(e.target.value) });
-                              if (enableAuditLog) console.log(`[AUDIT] ${currentUser?.name} alterou: Tempo de Sessão = ${e.target.value} min`);
+                              if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Tempo de Sessão = ${e.target.value} min`);
                             }}
                             className="bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50"
                           >
