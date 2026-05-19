@@ -747,6 +747,37 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                 <p className="text-sm text-slate-400 mt-1">Restaure versões anteriores do mapa</p>
               </div>
               <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  accept=".json"
+                  id="import-versions"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const text = await file.text();
+                      const data = JSON.parse(text);
+                      if (data.versions && Array.isArray(data.versions)) {
+                        if (confirm(`Importar ${data.versions.length} versões? Isso adicionará ao histórico existente.`)) {
+                          data.versions.forEach((v: any) => saveVersion(v.userName, v.userEmail, v.description, v.nodes, v.edges, v.nodeDetails));
+                          alert('✅ Versões importadas com sucesso!');
+                        }
+                      } else {
+                        alert('❌ Arquivo inválido. Formato incorreto.');
+                      }
+                    } catch (err) {
+                      alert('❌ Erro ao importar: ' + (err as Error).message);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                <label
+                  htmlFor="import-versions"
+                  className="px-3 py-1.5 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                >
+                  Importar JSON
+                </label>
                 <button
                   onClick={exportVersions}
                   className="px-3 py-1.5 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
