@@ -14,30 +14,51 @@ export function useSupabase() {
   const [loading, setLoading] = useState(true);
 
   const fetchProcessItems = async () => {
-    const { data, error } = await supabase.from('process_items').select('*');
-    if (error) {
-      console.error('Error fetching process items:', error);
-      return;
-    }
-    
-    // Transform flat table into nested ProcessItem structure
-    const allItems = data.map(item => ({
-      ...item,
-      items: [],
-      updatedAt: item.created_at, // Use created_at or formatted string
-    }));
-
-    const rootItems: ProcessItem[] = allItems.filter(item => !item.parent_id);
-    const childItems = allItems.filter(item => item.parent_id);
-
-    childItems.forEach(child => {
-      const parent = rootItems.find(p => p.id === child.parent_id);
-      if (parent) {
-        parent.items.push(child);
+    try {
+      const { data, error } = await supabase.from('process_items').select('*');
+      
+      if (error) {
+        console.error('❌ Error fetching process items:', error);
+        setItems([]);
+        return;
       }
-    });
+      
+      if (!data || data.length === 0) {
+        console.log('✅ No process items found in Supabase (database is empty)');
+        setItems([]);
+        return;
+      }
+      
+      console.log('✅ Fetched process items from Supabase:', data);
+      
+      // Transform flat table into nested ProcessItem structure
+      const allItems = data.map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        type: item.type,
+        parent_id: item.parent_id,
+        content: item.content,
+        items: [],
+        updatedAt: new Date(item.created_at).toLocaleDateString('pt-BR'),
+      }));
 
-    setItems(rootItems);
+      const rootItems: ProcessItem[] = allItems.filter((item: any) => !item.parent_id);
+      const childItems = allItems.filter((item: any) => item.parent_id);
+
+      childItems.forEach((child: any) => {
+        const parent = rootItems.find(p => p.id === child.parent_id);
+        if (parent) {
+          parent.items = parent.items || [];
+          parent.items.push(child);
+        }
+      });
+
+      setItems(rootItems);
+    } catch (err) {
+      console.error('❌ Exception fetching process items:', err);
+      setItems([]);
+    }
   };
 
   const fetchDocuments = async () => {
