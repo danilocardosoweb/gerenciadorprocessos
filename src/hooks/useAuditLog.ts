@@ -59,7 +59,7 @@ export function useAuditLog(enabled: boolean) {
   }, [enabled]);
 
   const clearLogs = useCallback(() => {
-    if (confirm('Tem certeza que deseja apagar todo o histórico de auditoria? Esta ação não pode ser desfeita.')) {
+    if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá APAGAR TODO O HISTÓRICO DE AUDITORIA.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
       setLogs([]);
       localStorage.removeItem(STORAGE_KEY);
     }

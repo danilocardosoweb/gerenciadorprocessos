@@ -32,6 +32,8 @@ import { usePreferences } from './hooks/usePreferences';
 import { useAuditLog } from './hooks/useAuditLog';
 import { useVersionHistory } from './hooks/useVersionHistory';
 import { useToast, ToastContainer } from './components/Toast';
+import { ConfirmModal } from './components/ConfirmModal';
+import { useConfirm } from './hooks/useConfirm';
 import { useKeyboardShortcuts, useAppShortcuts } from './hooks/useKeyboardShortcuts';
 
 const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
@@ -60,6 +62,56 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
 
   // Toast notifications
   const { toasts, removeToast, success } = useToast();
+  
+  // Confirm modal state
+  const { confirm, confirmState, closeConfirm, handleConfirm } = useConfirm();
+  
+  // Check if user is admin
+  const isAdmin = currentUser?.role === 'Administrador';
+  
+  // Delete node function - only for admins
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    if (!isAdmin) {
+      alert('❌ Apenas administradores podem excluir nós.');
+      return;
+    }
+    
+    // Remove node
+    setNodes((prev) => prev.filter((n) => n.id !== nodeId));
+    
+    // Remove connected edges
+    setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    
+    success('Nó excluído', 'O nó foi removido com sucesso');
+  }, [isAdmin, setNodes, setEdges, success]);
+  
+  // Delete node with confirmation
+  const handleDeleteNodeWithConfirm = useCallback(async (nodeId: string) => {
+    const confirmed = await confirm({
+      title: 'EXCLUIR NÓ?',
+      message: 'Esta ação irá EXCLUIR este nó permanentemente.\n\nEsta ação NÃO pode ser desfeita.',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      type: 'danger'
+    });
+    
+    if (confirmed) {
+      handleDeleteNode(nodeId);
+    }
+  }, [confirm, handleDeleteNode]);
+
+  // Update nodes with isAdmin and onDelete props
+  const nodesWithAdminProps = useMemo(() => {
+    return nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        isAdmin,
+        isPresenting,
+        onDeleteConfirm: handleDeleteNodeWithConfirm,
+      },
+    }));
+  }, [nodes, isAdmin, isPresenting, handleDeleteNodeWithConfirm]);
 
   // Keyboard shortcuts
   useAppShortcuts({
@@ -523,7 +575,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
 
         <div className="flex-1 relative">
           <ReactFlow
-            nodes={nodes}
+            nodes={nodesWithAdminProps}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -759,9 +811,16 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                       const text = await file.text();
                       const data = JSON.parse(text);
                       if (data.versions && Array.isArray(data.versions)) {
-                        if (confirm(`Importar ${data.versions.length} versões? Isso adicionará ao histórico existente.`)) {
+                        const confirmed = await confirm({
+                          title: 'CONFIRMAR IMPORTAÇÃO?',
+                          message: `Você está prestes a importar ${data.versions.length} versões.\n\nElas serão ADICIONADAS ao histórico existente.`,
+                          confirmText: 'Importar',
+                          cancelText: 'Cancelar',
+                          type: 'warning'
+                        });
+                        if (confirmed) {
                           data.versions.forEach((v: any) => saveVersion(v.userName, v.userEmail, v.description, v.nodes, v.edges, v.nodeDetails));
-                          alert('✅ Versões importadas com sucesso!');
+                          success('Versões importadas', `${data.versions.length} versões foram adicionadas ao histórico.`);
                         }
                       } else {
                         alert('❌ Arquivo inválido. Formato incorreto.');
@@ -823,15 +882,22 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                         </div>
                         <div className="flex items-center gap-2 ml-4">
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               const restored = restoreVersion(version.id);
                               if (restored) {
-                                if (confirm('Restaurar esta versão? As alterações atuais serão substituídas.')) {
+                                const confirmed = await confirm({
+                                  title: 'RESTAURAR VERSÃO?',
+                                  message: 'Esta ação irá RESTAURAR uma versão anterior.\n\nAs alterações ATUAIS serão SUBSTITUÍDAS.',
+                                  confirmText: 'Restaurar',
+                                  cancelText: 'Cancelar',
+                                  type: 'warning'
+                                });
+                                if (confirmed) {
                                   setNodes(restored.nodes);
                                   setEdges(restored.edges);
                                   setNodeDetailsMap(restored.nodeDetails);
                                   setIsVersionPanelOpen(false);
-                                  alert('Versão restaurada com sucesso!');
+                                  success('Versão restaurada', 'O mapa foi restaurado para a versão selecionada.');
                                 }
                               }
                             }}
@@ -841,9 +907,17 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                             <RotateCcw size={18} />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm('Excluir esta versão?')) {
+                            onClick={async () => {
+                              const confirmed = await confirm({
+                                title: 'EXCLUIR VERSÃO?',
+                                message: 'Esta ação irá EXCLUIR esta versão permanentemente.',
+                                confirmText: 'Excluir',
+                                cancelText: 'Cancelar',
+                                type: 'danger'
+                              });
+                              if (confirmed) {
                                 deleteVersion(version.id);
+                                success('Versão excluída', 'A versão foi removida do histórico.');
                               }
                             }}
                             className="p-2 text-slate-300 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -892,6 +966,18 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
         selectedNodeId={selectedNodeId}
       />
 
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        onClose={closeConfirm}
+        onConfirm={handleConfirm}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        cancelText={confirmState.cancelText}
+        type={confirmState.type}
+      />
+
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
@@ -901,7 +987,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
 export default function App() {
   // All state hooks must be at the top before any conditionals
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
   const [currentMap, setCurrentMap] = useState<{ id: string; title: string } | null>(null);
   const [currentMarkdown, setCurrentMarkdown] = useState<{ id: string; title: string; content: string } | null>(null);
   const [currentSector3D, setCurrentSector3D] = useState<{ id: string; title: string } | null>(null);
@@ -917,9 +1003,9 @@ export default function App() {
 
   // Mock users database (in real app this would come from backend)
   const mockUsers = [
-    { email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', name: 'Danilo Cardoso', role: 'Administrador' },
-    { email: 'joao.silva@exemplo.com', password: '123456', name: 'João Silva', role: 'Editor' },
-    { email: 'maria.souza@exemplo.com', password: '123456', name: 'Maria Souza', role: 'Editor' },
+    { id: '1', email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', name: 'Danilo Cardoso', role: 'Administrador' },
+    { id: '2', email: 'joao.silva@exemplo.com', password: '123456', name: 'João Silva', role: 'Editor' },
+    { id: '3', email: 'maria.souza@exemplo.com', password: '123456', name: 'Maria Souza', role: 'Editor' },
   ];
 
   // Session timeout check
@@ -971,7 +1057,7 @@ export default function App() {
     const user = mockUsers.find(u => u.email === email && u.password === password);
     if (user) {
       setIsAuthenticated(true);
-      setCurrentUser({ name: user.name, email: user.email, role: user.role });
+      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role });
       addLog({
         userName: user.name,
         userEmail: user.email,

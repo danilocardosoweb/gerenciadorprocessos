@@ -67,7 +67,7 @@ export function DocumentManager({ documents, setDocuments, refreshData }: Docume
   };
 
   const handleDeleteDoc = async (id: string) => {
-    if (!confirm('Você tem certeza que deseja excluir este documento?')) return;
+    if (!confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá EXCLUIR este documento permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) return;
     setDocuments(documents.filter(d => d.id !== id));
     await supabase.from('documents').delete().eq('id', id);
     if (refreshData) refreshData();

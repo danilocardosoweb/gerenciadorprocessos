@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon } from 'lucide-react';
+// v1.1 - Added Save button to context menu
+import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon, Save, CheckSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 // Helper to format dates nicely
@@ -38,8 +39,8 @@ function formatDate(dateStr: string): string {
 import { SettingsModal } from './SettingsModal';
 import { NewItemModal } from './NewItemModal';
 import { AiImportModal } from './AiImportModal';
-import { DataExportImport } from './DataExportImport';
 import { DocumentManager, DocumentItem } from './DocumentManager';
+import { TaskManager } from './TaskManager';
 import { GlobalMetrics } from './GlobalMetrics';
 import { useSupabase } from '../hooks/useSupabase';
 import { supabase } from '../lib/supabase';
@@ -50,7 +51,7 @@ import { SyncStatus } from './SyncStatus';
 import { useTheme } from '../hooks/useTheme';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { MobileLayout, useIsMobile } from './MobileLayout';
-import { BarChart3, Database } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 
 export interface ProcessItem {
   id: string;
@@ -61,6 +62,7 @@ export interface ProcessItem {
   items?: ProcessItem[]; // For folders
   content?: string; // For markdown
   parent_id?: string | null;
+  tags?: string[];
 }
 
 const initialData: ProcessItem[] = [
@@ -136,7 +138,7 @@ const initialData: ProcessItem[] = [
 ];
 
 interface DashboardProps {
-  currentUser: { name: string; email: string; role: string } | null;
+  currentUser: { id: string; name: string; email: string; role: string } | null;
   onLogout: () => void;
   preferences: Preferences;
   setPreferences: (newPrefs: Partial<Preferences>) => void;
@@ -162,7 +164,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   } = useSupabaseSync();
   
   const [currentFolder, setCurrentFolder] = useState<ProcessItem | null>(null);
-  const [folderTab, setFolderTab] = useState<'items' | 'docs'>('items');
+  const [folderTab, setFolderTab] = useState<'items' | 'docs' | 'tasks'>('items');
   
   // Theme
   const { theme, resolvedTheme, setTheme } = useTheme();
@@ -203,7 +205,6 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
   const [modalInitialType, setModalInitialType] = useState<'map' | 'folder' | 'markdown' | 'sector3d'>('map');
   const [isAiImportOpen, setIsAiImportOpen] = useState(false);
-  const [isExportImportOpen, setIsExportImportOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   
   // Context Menu state
@@ -304,7 +305,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   };
 
   const handleDeleteItem = async (id: string) => {
-    if(!confirm("Atenção, deseja remover este item?")) return;
+    if(!confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá REMOVER este item permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) return;
     
     // Optimistic delete
     if (currentFolder) {
@@ -347,22 +348,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
       <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[140px] pointer-events-none z-0"></div>
 
       {/* Header - Hidden on mobile (shown in MobileLayout) */}
-      <header className="hidden lg:flex h-20 items-center justify-between px-10 bg-white/[0.02] backdrop-blur-3xl border-b border-white/5 z-10 sticky top-0 relative">
+      <header className="hidden lg:flex h-20 items-center justify-between px-10 bg-white/[0.02] backdrop-blur-3xl border-b border-white/5 z-[50] sticky top-0 relative">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all text-white border border-white/20"
-            title="Configurações e Acessos"
-          >
-            <Settings2 size={24} />
-          </button>
-          <button 
-            onClick={() => setIsExportImportOpen(true)}
-            className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all text-white border border-white/20"
-            title="Exportar/Importar Dados"
-          >
-            <Database size={24} />
-          </button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
               Tecno <span className="text-blue-400 font-light">Mapper</span>
@@ -422,7 +409,10 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
           {/* User Menu */}
           <div className="relative">
             <button
-              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsUserMenuOpen(!isUserMenuOpen);
+              }}
               className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all"
             >
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs">
@@ -441,7 +431,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-2 w-64 bg-[#1e293b] border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-64 bg-[#1e293b] border border-white/10 rounded-xl shadow-2xl z-[100] overflow-hidden backdrop-blur-xl bg-opacity-95"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <div className="p-4 border-b border-white/10">
                     <p className="font-semibold text-white">{currentUser?.name}</p>
@@ -518,6 +509,12 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
               >
                 <FileText size={16} /> Central de Documentos
               </button>
+              <button 
+                onClick={() => setFolderTab('tasks')}
+                className={cn("px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2", folderTab === 'tasks' ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white")}
+              >
+                <CheckSquare size={16} /> Tarefas
+              </button>
             </div>
           </div>
 
@@ -543,6 +540,12 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
 
           {folderTab === 'docs' ? (
             <DocumentManager documents={documents} setDocuments={setDocuments} refreshData={refreshData} />
+          ) : folderTab === 'tasks' ? (
+            <TaskManager 
+              currentUser={currentUser} 
+              processItems={items}
+              department={currentUser?.role}
+            />
           ) : filteredItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
               <Search size={48} className="mb-4 opacity-20" />
@@ -598,7 +601,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: -10 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute right-0 top-full mt-2 w-48 bg-[#1e293b] border border-white/10 rounded-xl shadow-xl z-20 overflow-hidden"
+                            className="absolute right-0 top-full mt-2 w-48 bg-[#1e293b] border border-white/10 rounded-xl shadow-xl z-[90] overflow-hidden backdrop-blur-xl bg-opacity-95"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <div className="p-1">
@@ -607,6 +610,31 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                               </button>
                               <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
                                 <MoveRight size={16} /> Mover para...
+                              </button>
+                              <button 
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(null);
+                                  // Save to Supabase immediately
+                                  const { error } = await supabase.from('process_items').upsert({
+                                    id: item.id,
+                                    title: item.title,
+                                    description: item.description,
+                                    type: item.type,
+                                    parent_id: item.parent_id || null,
+                                    content: item.content || null,
+                                    tags: item.tags || [],
+                                    updated_at: new Date().toISOString()
+                                  });
+                                  if (error) {
+                                    alert('Erro ao salvar: ' + error.message);
+                                  } else {
+                                    alert('✅ Item salvo com sucesso!');
+                                  }
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                              >
+                                <Save size={16} /> Salvar
                               </button>
                               <div className="h-px bg-white/5 my-1 mx-2" />
                               <button 
@@ -694,15 +722,6 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             }}
           />
         )}
-        <DataExportImport 
-          isOpen={isExportImportOpen}
-          onClose={() => setIsExportImportOpen(false)}
-          items={items}
-          documents={documents}
-          onImportSuccess={() => {
-            refreshData();
-          }}
-        />
         {isNewItemOpen && (
           <NewItemModal 
             onClose={() => setIsNewItemOpen(false)} 

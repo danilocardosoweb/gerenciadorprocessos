@@ -82,7 +82,7 @@ export function useVersionHistory(mapId: string) {
   }, []);
 
   const clearAllVersions = useCallback(() => {
-    if (confirm('Tem certeza que deseja apagar todo o histórico de versões?')) {
+    if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá APAGAR TODO O HISTÓRICO DE VERSÕES.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
       setVersions([]);
       localStorage.removeItem(storageKey);
     }

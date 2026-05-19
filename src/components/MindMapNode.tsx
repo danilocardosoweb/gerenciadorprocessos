@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import { cn } from '../lib/utils';
-import { Target, ArrowRight, Settings, Users, FileText, Activity } from 'lucide-react';
+import { Target, ArrowRight, Settings, Users, FileText, Activity, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 const iconMap: Record<string, ReactNode> = {
@@ -35,8 +35,8 @@ const iconBgMap: Record<string, string> = {
   default: 'bg-white/10 text-slate-400',
 };
 
-export function MindMapNode({ data, selected }: { data: any; selected: boolean }) {
-  const { label, nodeType, requiredIATF, isFocus, isMuted } = data;
+export function MindMapNode({ data, selected, id }: { data: any; selected: boolean; id: string }) {
+  const { label, nodeType, numberCode, isFocus, isMuted, onDelete, onDeleteConfirm, isAdmin, isPresenting } = data;
   
   const isRoot = nodeType === 'root';
   const colorClass = categoryColorMap[nodeType] || categoryColorMap.default;
@@ -64,17 +64,33 @@ export function MindMapNode({ data, selected }: { data: any; selected: boolean }
         )}
         <div className="flex flex-col flex-1">
           <span className={cn('font-semibold leading-tight', isRoot ? 'text-white text-lg' : 'text-slate-100 text-sm')}>
+            {numberCode && (
+              <span className="text-blue-400 font-mono mr-1.5">{numberCode}</span>
+            )}
             {label}
           </span>
-          {requiredIATF && (
-            <span className={cn('text-[10px] mt-1 font-mono tracking-wider font-semibold', isRoot ? 'text-blue-300' : 'text-slate-400')}>
-              IATF {requiredIATF}
-            </span>
-          )}
         </div>
       </div>
 
       <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-blue-400 !border-0" />
+      
+      {/* Delete button - only for admins and non-root nodes, hidden during presentation */}
+      {isAdmin && !isPresenting && nodeType !== 'root' && (onDelete || onDeleteConfirm) && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onDeleteConfirm) {
+              onDeleteConfirm(id);
+            } else if (onDelete) {
+              onDelete(id);
+            }
+          }}
+          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-400 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
+          title="Excluir nó (Admin)"
+        >
+          <Trash2 size={12} />
+        </button>
+      )}
     </div>
   );
 }

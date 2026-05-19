@@ -128,11 +128,6 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                       <span className="text-xs text-slate-400 uppercase tracking-widest font-semibold">
                         {nodeData.category}
                       </span>
-                      {nodeData.requiredIATF && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono font-medium border border-blue-500/30">
-                          IATF {nodeData.requiredIATF}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>

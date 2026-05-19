@@ -57,16 +57,16 @@ export function SyncStatus({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 top-full mt-2 w-72 bg-[#0f172a] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+            className="absolute right-0 top-full mt-2 w-72 bg-[#1e293b] border border-white/20 rounded-xl shadow-2xl overflow-hidden z-[100]"
           >
-            <div className="p-4 border-b border-white/10">
+            <div className="p-4 border-b border-white/10 bg-[#0f172a]">
               <h4 className="font-bold text-white mb-1">Status de Sincronização</h4>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-300">
                 {isOnline ? 'Conectado ao servidor' : 'Sem conexão com o servidor'}
               </p>
             </div>
 
-            <div className="p-4 space-y-3">
+            <div className="p-4 space-y-3 bg-[#1e293b]">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-400">Conexão:</span>
                 <span className={`text-sm font-medium ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
