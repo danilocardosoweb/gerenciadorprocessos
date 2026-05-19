@@ -17,7 +17,27 @@ export interface Department {
   description?: string;
   color: string;
   icon: string;
+  isDefault?: boolean;
 }
+
+// Local storage keys
+const USERS_STORAGE_KEY = 'tecno_users';
+const DEPTS_STORAGE_KEY = 'tecno_departments';
+
+// Default departments
+const DEFAULT_DEPARTMENTS: Department[] = [
+  { id: '1', name: 'Diretoria', description: 'Gestão e direção estratégica', color: '#8b5cf6', icon: 'crown' },
+  { id: '2', name: 'Comercial', description: 'Vendas e atendimento ao cliente', color: '#10b981', icon: 'shopping-cart' },
+  { id: '3', name: 'Qualidade', description: 'Controle de qualidade e certificações', color: '#f59e0b', icon: 'shield-check' },
+  { id: '4', name: 'PCP', description: 'Planejamento e Controle da Produção', color: '#3b82f6', icon: 'calendar-clock' },
+  { id: '5', name: 'Produção', description: 'Operações de fabricação', color: '#ef4444', icon: 'factory' },
+  { id: '6', name: 'Manutenção', description: 'Manutenção de equipamentos', color: '#6b7280', icon: 'wrench' },
+  { id: '7', name: 'Embalagem', description: 'Processos de embalagem', color: '#84cc16', icon: 'package' },
+  { id: '8', name: 'Expedição', description: 'Logística de saída', color: '#06b6d4', icon: 'truck' },
+  { id: '9', name: 'Alúnica', description: 'Setor de alumínio', color: '#a855f7', icon: 'metal' },
+  { id: '10', name: 'Zincolor', description: 'Setor de zinco colorido', color: '#f97316', icon: 'palette' },
+  { id: '11', name: 'Fixxar', description: 'Setor Fixxar', color: '#ec4899', icon: 'screwdriver' },
+];
 
 export function useUsers() {
   const [users, setUsers] = useState<User[]>([]);
@@ -25,238 +45,134 @@ export function useUsers() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch users with department info
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select(`
-          id,
-          email,
-          full_name,
-          is_active,
-          created_at,
-          roles:role_id (name),
-          user_departments (department:department_id (name))
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const formattedUsers: User[] = (data || []).map((u: any) => ({
-        id: u.id,
-        name: u.full_name || u.email.split('@')[0],
-        email: u.email,
-        role: u.roles?.name || 'Visualizador',
-        department: u.user_departments?.[0]?.department?.name || '',
-        status: u.is_active ? 'Ativo' : 'Inativo',
-        created_at: u.created_at
-      }));
-
-      setUsers(formattedUsers);
-    } catch (err: any) {
-      console.error('Error fetching users:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  // Load from localStorage on mount
+  useEffect(() => {
+    const savedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    const savedDepts = localStorage.getItem(DEPTS_STORAGE_KEY);
+    
+    if (savedUsers) {
+      setUsers(JSON.parse(savedUsers));
+    } else {
+      // Default users
+      setUsers([
+        { id: '1', name: 'Danilo Cardoso', email: 'pcp@tecnoperfilalumino.com.br', role: 'Administrador', department: 'PCP', status: 'Ativo' },
+        { id: '2', name: 'João Silva', email: 'joao.silva@exemplo.com', role: 'Editor', department: 'Produção', status: 'Ativo' },
+        { id: '3', name: 'Maria Souza', email: 'maria.souza@exemplo.com', role: 'Editor', department: 'Qualidade', status: 'Ativo' },
+      ]);
+    }
+    
+    if (savedDepts) {
+      setDepartments(JSON.parse(savedDepts));
+    } else {
+      setDepartments(DEFAULT_DEPARTMENTS);
+      localStorage.setItem(DEPTS_STORAGE_KEY, JSON.stringify(DEFAULT_DEPARTMENTS));
     }
   }, []);
 
-  // Fetch departments
-  const fetchDepartments = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('departments')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-      setDepartments(data || []);
-    } catch (err: any) {
-      console.error('Error fetching departments:', err);
+  // Save to localStorage when users change
+  useEffect(() => {
+    if (users.length > 0) {
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
     }
-  }, []);
+  }, [users]);
 
-  // Create user
+  // Save departments to localStorage
+  useEffect(() => {
+    if (departments.length > 0) {
+      localStorage.setItem(DEPTS_STORAGE_KEY, JSON.stringify(departments));
+    }
+  }, [departments]);
+
+  // Create user - saves to localStorage
   const createUser = useCallback(async (userData: Omit<User, 'id' | 'created_at'> & { password?: string }) => {
     setError(null);
     try {
-      // First, get role_id from role name
-      const { data: roleData } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', userData.role)
-        .single();
-
-      if (!roleData) throw new Error('Role not found');
-
-      // Get department_id from department name
-      let departmentId = null;
-      if (userData.department) {
-        const { data: deptData } = await supabase
-          .from('departments')
-          .select('id')
-          .eq('name', userData.department)
-          .single();
-        departmentId = deptData?.id;
-      }
-
-      // Create user in auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const newUser: User = {
+        id: Date.now().toString(),
+        name: userData.name,
         email: userData.email,
-        password: userData.password || 'temp123456',
-        options: {
-          data: {
-            full_name: userData.name,
-          }
-        }
-      });
-
-      if (authError) throw authError;
-
-      // Update user record with role
-      if (authData.user) {
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({
-            full_name: userData.name,
-            role_id: roleData.id,
-            is_active: userData.status === 'Ativo'
-          })
-          .eq('id', authData.user.id);
-
-        if (updateError) throw updateError;
-
-        // Link user to department if provided
-        if (departmentId) {
-          const { error: deptError } = await supabase
-            .from('user_departments')
-            .insert({
-              user_id: authData.user.id,
-              department_id: departmentId,
-              is_manager: false
-            });
-          
-          if (deptError) console.warn('Error linking department:', deptError);
-        }
-      }
-
-      await fetchUsers();
+        role: userData.role,
+        department: userData.department,
+        status: userData.status,
+        created_at: new Date().toISOString()
+      };
+      
+      setUsers(prev => [...prev, newUser]);
       return { success: true };
     } catch (err: any) {
       console.error('Error creating user:', err);
       setError(err.message);
       return { success: false, error: err.message };
     }
-  }, [fetchUsers]);
+  }, []);
 
   // Update user
   const updateUser = useCallback(async (id: string, userData: Partial<User> & { password?: string }) => {
     setError(null);
     try {
-      // Get role_id from role name if provided
-      let roleId = null;
-      if (userData.role) {
-        const { data: roleData } = await supabase
-          .from('roles')
-          .select('id')
-          .eq('name', userData.role)
-          .single();
-        roleId = roleData?.id;
-      }
-
-      // Get department_id from department name if provided
-      let departmentId = null;
-      if (userData.department) {
-        const { data: deptData } = await supabase
-          .from('departments')
-          .select('id')
-          .eq('name', userData.department)
-          .single();
-        departmentId = deptData?.id;
-      }
-
-      // Update user
-      const updates: any = {};
-      if (userData.name) updates.full_name = userData.name;
-      if (roleId) updates.role_id = roleId;
-      if (userData.status !== undefined) updates.is_active = userData.status === 'Ativo';
-
-      const { error: updateError } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', id);
-
-      if (updateError) throw updateError;
-
-      // Update password if provided
-      if (userData.password) {
-        const { error: pwError } = await supabase.auth.updateUser({
-          password: userData.password
-        });
-        if (pwError) console.warn('Error updating password:', pwError);
-      }
-
-      // Update department link
-      if (departmentId !== undefined) {
-        // Remove existing links
-        await supabase.from('user_departments').delete().eq('user_id', id);
-        
-        // Add new link if department provided
-        if (departmentId) {
-          await supabase.from('user_departments').insert({
-            user_id: id,
-            department_id: departmentId,
-            is_manager: false
-          });
-        }
-      }
-
-      await fetchUsers();
+      setUsers(prev => prev.map(u => 
+        u.id === id ? { 
+          ...u, 
+          name: userData.name || u.name,
+          email: userData.email || u.email,
+          role: userData.role || u.role,
+          department: userData.department !== undefined ? userData.department : u.department,
+          status: userData.status || u.status
+        } : u
+      ));
       return { success: true };
     } catch (err: any) {
       console.error('Error updating user:', err);
       setError(err.message);
       return { success: false, error: err.message };
     }
-  }, [fetchUsers]);
+  }, []);
 
   // Delete user
   const deleteUser = useCallback(async (id: string) => {
     setError(null);
     try {
-      // Delete user departments links
-      await supabase.from('user_departments').delete().eq('user_id', id);
-      
-      // Delete user record
-      const { error } = await supabase.from('users').delete().eq('id', id);
-      if (error) throw error;
-
-      await fetchUsers();
+      setUsers(prev => prev.filter(u => u.id !== id));
       return { success: true };
     } catch (err: any) {
       console.error('Error deleting user:', err);
       setError(err.message);
       return { success: false, error: err.message };
     }
-  }, [fetchUsers]);
+  }, []);
 
-  useEffect(() => {
-    fetchUsers();
-    fetchDepartments();
-  }, [fetchUsers, fetchDepartments]);
+  // Add department
+  const addDepartment = useCallback(async (dept: Omit<Department, 'id'>) => {
+    const newDept: Department = {
+      ...dept,
+      id: Date.now().toString()
+    };
+    setDepartments(prev => [...prev, newDept]);
+    return { success: true };
+  }, []);
+
+  // Update department
+  const updateDepartment = useCallback(async (id: string, dept: Partial<Department>) => {
+    setDepartments(prev => prev.map(d => d.id === id ? { ...d, ...dept } : d));
+    return { success: true };
+  }, []);
+
+  // Delete department
+  const deleteDepartment = useCallback(async (id: string) => {
+    setDepartments(prev => prev.filter(d => d.id !== id));
+    return { success: true };
+  }, []);
 
   return {
     users,
     departments,
     loading,
     error,
-    fetchUsers,
-    fetchDepartments,
     createUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    addDepartment,
+    updateDepartment,
+    deleteDepartment
   };
 }

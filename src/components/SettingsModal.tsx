@@ -29,7 +29,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
 type User = { id: number; name: string; email: string; password?: string; role: string; department?: string; status: 'Ativo' | 'Inativo' };
 type Role = { id: number; name: string; desc: string; users: number };
 
-type Department = { id: string; name: string; description: string; color: string; icon: string; isDefault: boolean };
+type Department = { id: string; name: string; description?: string; color: string; icon: string; isDefault?: boolean };
 
 export function SettingsModal({ onClose, preferences: externalPreferences, setPreferences: externalSetPreferences, currentUser, enableAuditLog }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'departments' | 'preferences' | 'audit'>('users');
@@ -41,31 +41,25 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   const [auditFilter, setAuditFilter] = useState<'' | 'auth' | 'config' | 'data' | 'security' | 'system'>('');
   const filteredLogs = auditFilter ? filterLogs(auditFilter) : logs;
   
-  // Use the useUsers hook for Supabase integration
-  const { users, departments: dbDepartments, loading: usersLoading, error: usersError, createUser, updateUser, deleteUser, fetchUsers } = useUsers();
-  
-  // Local state for departments (can be managed separately or synced with DB)
-  const [departments, setDepartments] = useState<Department[]>([]);
+  // Use the useUsers hook for localStorage integration
+  const { 
+    users, 
+    departments, 
+    loading: usersLoading, 
+    error: usersError, 
+    createUser, 
+    updateUser, 
+    deleteUser,
+    addDepartment,
+    updateDepartment,
+    deleteDepartment
+  } = useUsers();
 
   const [roles, setRoles] = useState<Role[]>([
     { id: 1, name: 'Administrador', desc: 'Acesso total ao sistema, configurações e mapas.', users: 1 },
     { id: 2, name: 'Editor', desc: 'Pode criar e editar mapas e documentos, mas não gerencia usuários.', users: 2 },
     { id: 3, name: 'Visualizador', desc: 'Apenas visualiza mapas e documentos aprovados.', users: 0 },
   ]);
-
-  // Sync departments from DB with local state
-  useEffect(() => {
-    if (dbDepartments.length > 0) {
-      setDepartments(dbDepartments.map(d => ({
-        id: d.id,
-        name: d.name,
-        description: d.description || '',
-        color: d.color,
-        icon: d.icon,
-        isDefault: false // You can add this field to DB later if needed
-      })));
-    }
-  }, [dbDepartments]);
 
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [newDepartment, setNewDepartment] = useState<Partial<Department>>({ name: '', description: '', color: '#3b82f6', icon: 'building', isDefault: false });
@@ -314,7 +308,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                         />
                       </div>
                       <div className="text-sm text-slate-400 font-medium ml-auto">
-                        {filteredUsers.length} usuário(s)
+                        {users.length} usuário(s)
                       </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -941,9 +935,9 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                             </button>
                             {!dept.isDefault && (
                               <button
-                                onClick={() => {
+                                onClick={async () => {
                                   if (confirm(`Tem certeza que deseja excluir o departamento "${dept.name}"?`)) {
-                                    setDepartments(departments.filter(d => d.id !== dept.id));
+                                    await deleteDepartment(dept.id);
                                   }
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -1067,21 +1061,19 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                         Cancelar
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (!newDepartment.name?.trim()) return;
                           
                           if (activeView === 'edit_department' && editingDepartment) {
-                            setDepartments(departments.map(d => d.id === editingDepartment.id ? { ...d, ...newDepartment } as Department : d));
+                            await updateDepartment(editingDepartment.id, newDepartment);
                           } else {
-                            const newDept: Department = {
-                              id: Date.now().toString(),
+                            await addDepartment({
                               name: newDepartment.name || '',
                               description: newDepartment.description || '',
                               color: newDepartment.color || '#3b82f6',
                               icon: newDepartment.icon || 'building',
                               isDefault: newDepartment.isDefault || false
-                            };
-                            setDepartments([...departments, newDept]);
+                            });
                           }
                           
                           setActiveView('list');
