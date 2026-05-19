@@ -24,13 +24,31 @@ export function DataExportImport({ isOpen, onClose, items, documents, onImportSu
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Coletar todos os dados do localStorage
+  const collectAllLocalStorageData = () => {
+    const data: Record<string, any> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('tecno_mapper')) {
+        try {
+          data[key] = JSON.parse(localStorage.getItem(key) || 'null');
+        } catch {
+          data[key] = localStorage.getItem(key);
+        }
+      }
+    }
+    return data;
+  };
+
   // Exportar dados
   const handleExport = () => {
+    const localStorageData = collectAllLocalStorageData();
     const data = {
       version: '1.0',
       exportedAt: new Date().toISOString(),
       processItems: items,
-      documents: documents
+      documents: documents,
+      localStorage: localStorageData
     };
 
     if (exportFormat === 'json') {
@@ -105,6 +123,17 @@ export function DataExportImport({ isOpen, onClose, items, documents, onImportSu
         return;
       }
 
+      // Importar localStorage data se existir
+      if (data.localStorage && typeof data.localStorage === 'object') {
+        Object.entries(data.localStorage).forEach(([key, value]) => {
+          try {
+            localStorage.setItem(key, JSON.stringify(value));
+          } catch {
+            localStorage.setItem(key, String(value));
+          }
+        });
+      }
+
       // Importar para Supabase
       const itemsToInsert = data.processItems.map((item: any) => ({
         title: item.title,
@@ -120,7 +149,7 @@ export function DataExportImport({ isOpen, onClose, items, documents, onImportSu
       if (error) {
         setMessage({ type: 'error', text: `Erro ao importar: ${error.message}` });
       } else {
-        setMessage({ type: 'success', text: `${itemsToInsert.length} itens importados com sucesso!` });
+        setMessage({ type: 'success', text: `${itemsToInsert.length} itens importados! Dados locais restaurados! Recarregue a página.` });
         setImportData('');
         onImportSuccess?.();
       }
@@ -146,11 +175,13 @@ export function DataExportImport({ isOpen, onClose, items, documents, onImportSu
 
   // Extrair dados atuais para cópia
   const handleCopyCurrentData = () => {
+    const localStorageData = collectAllLocalStorageData();
     const data = {
       version: '1.0',
       exportedAt: new Date().toISOString(),
       processItems: items,
-      documents: documents
+      documents: documents,
+      localStorage: localStorageData
     };
     navigator.clipboard.writeText(JSON.stringify(data, null, 2));
     setMessage({ type: 'success', text: 'Dados copiados! Cole no campo de importação.' });
@@ -231,6 +262,9 @@ export function DataExportImport({ isOpen, onClose, items, documents, onImportSu
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
                 <p className="text-sm text-blue-300">
                   <strong>Dados atuais:</strong> {items.length} processos, {documents.length} documentos
+                </p>
+                <p className="text-xs text-blue-400 mt-1">
+                  Inclui: mapas mentais, versões, preferências e todo histórico
                 </p>
               </div>
 
