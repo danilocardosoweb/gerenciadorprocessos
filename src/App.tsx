@@ -36,6 +36,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { useConfirm } from './hooks/useConfirm';
 import { useKeyboardShortcuts, useAppShortcuts } from './hooks/useKeyboardShortcuts';
 import { WorkInstructionExport } from './components/WorkInstructionExport';
+import { OperatorMode } from './components/OperatorMode';
 
 const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   initialNodes,
@@ -53,10 +54,11 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
   // Presentation State
-  const [isPresenting, setIsPresenting] = useState(false);
+  const [hoveredNodePosition, setHoveredNodePosition] = useState<{ x: number; y: number } | null>(null);
   const [presentationPath, setPresentationPath] = useState<string[]>([]);
   const [presentationIndex, setPresentationIndex] = useState(0);
-  
+  const [isPresenting, setIsPresenting] = useState(false);
+  const [viewMode, setViewMode] = useState<'technical' | 'operator'>('technical');
   const [hoveredNode, setHoveredNode] = useState<any | null>(null);
   const [hoverPosition, setHoverPosition] = useState<{ x: number, y: number } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -470,214 +472,240 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
       <div className="flex-1 h-full relative z-10 w-full flex flex-col">
         {/* Map Header when not presenting */}
         {!isPresenting && (
-          <div className="h-16 flex items-center px-6 bg-white/[0.02] backdrop-blur-xl border-b border-white/5 shrink-0 justify-between z-20">
+          <div className="h-20 flex items-center px-6 bg-white/[0.02] backdrop-blur-xl border-b border-white/5 shrink-0 z-20 gap-6">
             <div className="flex items-center gap-4">
               <button 
                 onClick={onBack}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
                 title="Voltar ao Dashboard"
               >
                 <ArrowLeft size={18} />
               </button>
-              <div className="h-6 w-px bg-white/10"></div>
               <div>
-                <h1 className="text-lg font-bold tracking-tight text-white m-0 leading-tight">
+                <p className="text-[10px] text-slate-400 uppercase tracking-[0.4em] font-semibold m-0">Procedimento</p>
+                <h1 className="text-xl font-bold tracking-tight text-white m-0 leading-tight">
                   {mapTitle}
                 </h1>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold m-0">
-                  Visualização do Processo
-                </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 pointer-events-auto">
-              <button
-                onClick={() => setIsSearchOpen(true)}
-                className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
-                title="Buscar no mapa (Ctrl+F)"
-              >
-                <Search size={16} /> Buscar
-              </button>
-              <button
-                onClick={() => {
-                  const desc = prompt('Descreva as alterações desta versão:');
-                  if (desc) {
-                    saveVersion(
-                      currentUser?.name || 'Usuário',
-                      currentUser?.email || '',
-                      desc,
-                      nodes,
-                      edges,
-                      nodeDetailsMap
-                    );
-                    alert('Versão salva com sucesso!');
-                  }
-                }}
-                className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
-                title="Salvar versão atual"
-              >
-                <Save size={16} /> Salvar Versão
-              </button>
-              <button
-                onClick={() => setIsVersionPanelOpen(true)}
-                className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors relative"
-                title="Histórico de versões"
-              >
-                <History size={16} /> Versões
-                {versionCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {versionCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={startPresentation}
-                className="bg-emerald-500/20 px-4 py-2 rounded-xl shadow-sm border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 flex items-center gap-2 transition-colors"
-              >
-                <Play size={16} /> Apresentar
-              </button>
-              <button 
-                onClick={() => setIsAddModalOpen(true)}
-                className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
-              >
-                <Plus size={16} /> Adicionar
-              </button>
-              <div className="relative" ref={exportMenuRef}>
+
+            <div className="flex-1 flex justify-center">
+              <div className="bg-slate-900/60 border border-white/10 rounded-full p-1 flex items-center text-sm">
                 <button
-                  onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                  className="bg-blue-600 px-4 py-2 rounded-xl shadow-sm border border-blue-500 text-sm font-medium text-white hover:bg-blue-500 flex items-center gap-2 transition-colors"
+                  onClick={() => setViewMode('operator')}
+                  className={`${viewMode === 'operator' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-300 hover:text-white'} px-6 py-2 rounded-full font-semibold transition-colors flex items-center gap-2`}
                 >
-                  <Download size={16} /> Exportar
+                  <Square size={14} /> Modo Operador
                 </button>
-                {isExportMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-[#0f172a] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
-                    <button
-                      onClick={handleExportPng}
-                      className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-slate-300 hover:text-white"
-                    >
-                      <Camera size={18} className="text-emerald-400" />
-                      <div>
-                        <div className="font-medium text-sm">Exportar PNG</div>
-                        <div className="text-xs text-slate-500">Imagem de alta qualidade</div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={handleExportSvg}
-                      className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-slate-300 hover:text-white border-t border-white/5"
-                    >
-                      <FileCode size={18} className="text-blue-400" />
-                      <div>
-                        <div className="font-medium text-sm">Exportar SVG</div>
-                        <div className="text-xs text-slate-500">Vetor escalável</div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsWorkInstructionOpen(true);
-                        setIsExportMenuOpen(false);
-                      }}
-                      className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-slate-300 hover:text-white border-t border-white/5"
-                    >
-                      <FileText size={18} className="text-amber-400" />
-                      <div>
-                        <div className="font-medium text-sm">Folha de Instruções</div>
-                        <div className="text-xs text-slate-500">PDF para impressão</div>
-                      </div>
-                    </button>
-                  </div>
-                )}
+                <button
+                  onClick={() => setViewMode('technical')}
+                  className={`${viewMode === 'technical' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-300 hover:text-white'} px-6 py-2 rounded-full font-semibold transition-colors flex items-center gap-2`}
+                >
+                  <Target size={14} /> Modo Técnico
+                </button>
               </div>
+            </div>
+
+            <div className="flex items-center gap-3 pointer-events-auto">
+              {viewMode === 'technical' ? (
+                <>
+                  <button
+                    onClick={() => setIsSearchOpen(true)}
+                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
+                    title="Buscar no mapa (Ctrl+F)"
+                  >
+                    <Search size={16} /> Buscar
+                  </button>
+                  <button
+                    onClick={() => {
+                      const desc = prompt('Descreva as alterações desta versão:');
+                      if (desc) {
+                        saveVersion(
+                          currentUser?.name || 'Usuário',
+                          currentUser?.email || '',
+                          desc,
+                          nodes,
+                          edges,
+                          nodeDetailsMap
+                        );
+                        alert('Versão salva com sucesso!');
+                      }
+                    }}
+                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
+                    title="Salvar versão atual"
+                  >
+                    <Save size={16} /> Salvar Versão
+                  </button>
+                  <button
+                    onClick={() => setIsVersionPanelOpen(true)}
+                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors relative"
+                    title="Histórico de versões"
+                  >
+                    <History size={16} /> Versões
+                    {versionCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+                        {versionCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={startPresentation}
+                    className="bg-emerald-500/20 px-4 py-2 rounded-xl shadow-sm border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 flex items-center gap-2 transition-colors"
+                  >
+                    <Play size={16} /> Apresentar
+                  </button>
+                  <button 
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
+                  >
+                    <Plus size={16} /> Adicionar
+                  </button>
+                  <div className="relative" ref={exportMenuRef}>
+                    <button
+                      onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                      className="bg-blue-600 px-4 py-2 rounded-xl shadow-sm border border-blue-500 text-sm font-medium text-white hover:bg-blue-500 flex items-center gap-2 transition-colors"
+                    >
+                      <Download size={16} /> Exportar
+                    </button>
+                    {isExportMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-56 bg-[#0f172a] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+                        <button
+                          onClick={handleExportPng}
+                          className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-slate-300 hover:text-white"
+                        >
+                          <Camera size={18} className="text-emerald-400" />
+                          <div>
+                            <div className="font-medium text-sm">Exportar PNG</div>
+                            <div className="text-xs text-slate-500">Imagem de alta qualidade</div>
+                          </div>
+                        </button>
+                        <button
+                          onClick={handleExportSvg}
+                          className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-slate-300 hover:text-white border-t border-white/5"
+                        >
+                          <FileCode size={18} className="text-blue-400" />
+                          <div>
+                            <div className="font-medium text-sm">Exportar SVG</div>
+                            <div className="text-xs text-slate-500">Vetor escalável</div>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsWorkInstructionOpen(true);
+                            setIsExportMenuOpen(false);
+                          }}
+                          className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-slate-300 hover:text-white border-t border-white/5"
+                        >
+                          <FileText size={18} className="text-amber-400" />
+                          <div>
+                            <div className="font-medium text-sm">Folha de Instruções</div>
+                            <div className="text-xs text-slate-500">PDF para impressão</div>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase tracking-[0.4em] text-blue-300">Fluxo guiado</p>
+                    <p className="text-sm text-slate-300">Operação simplificada para tablets</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        <div className="flex-1 relative">
-          <ReactFlow
-            nodes={nodesWithAdminProps}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            onNodeClick={onNodeClick}
-            onNodeMouseEnter={onNodeMouseEnter}
-            onNodeMouseMove={onNodeMouseMove}
-            onNodeMouseLeave={onNodeMouseLeave}
-            fitView
-            minZoom={0.1}
-            maxZoom={2}
-            proOptions={{ hideAttribution: true }}
-            nodesDraggable={!isPresenting}
-            nodesConnectable={!isPresenting}
-            elementsSelectable={!isPresenting}
-            panOnDrag={!isPresenting}
-            zoomOnScroll={!isPresenting}
-            zoomOnDoubleClick={!isPresenting}
-          >
-            <Background color="#1e293b" gap={24} size={2} />
-            
-            {/* Hide controls during presentation */}
-            {!isPresenting && (
-              <>
-                <Controls className="!bg-white/5 !border-white/10 !backdrop-blur-xl !shadow-sm !rounded-xl overflow-hidden [&>button]:!border-b [&>button]:!border-white/5 [&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button:hover]:!bg-white/10 [&>button:hover]:!text-white" />
-                <MiniMap 
-                  className="!bg-[#0f172a]/90 !border-white/10 !backdrop-blur-xl !shadow-sm !rounded-xl"
-                  maskColor="rgba(15, 23, 42, 0.7)"
-                  nodeColor={(n: any) => {
-                    if (n.data?.category === 'root') return '#4f46e5';
-                    if (n.data?.category === 'inputs') return '#fb923c';
-                    if (n.data?.category === 'outputs') return '#34d399';
-                    if (n.data?.category === 'resources') return '#fbbf24';
-                    if (n.data?.category === 'people') return '#818cf8';
-                    if (n.data?.category === 'methods') return '#fb7185';
-                    if (n.data?.category === 'kpis') return '#a78bfa';
-                    return '#475569';
-                  }}
-                />
-              </>
-            )}
-
-            {/* Presentation Toolbar Overlay */}
-            {isPresenting && (
-              <Panel position="bottom-center" className="mb-6 pointer-events-auto z-50 flex justify-center w-full">
-                <div className="bg-black/60 backdrop-blur-2xl border border-white/20 rounded-full px-6 py-3 flex items-center gap-6 shadow-2xl">
-                  <div className="flex items-center gap-2">
-                    <Target size={18} className="text-blue-400 shadow-blue-500 drop-shadow-lg" />
+        <div className="flex-1 relative overflow-hidden">
+          {viewMode === 'technical' ? (
+            <ReactFlow
+              nodes={nodesWithAdminProps}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              nodeTypes={nodeTypes}
+              onNodeClick={onNodeClick}
+              onNodeMouseEnter={onNodeMouseEnter}
+              onNodeMouseMove={onNodeMouseMove}
+              onNodeMouseLeave={onNodeMouseLeave}
+              fitView
+              minZoom={0.1}
+              maxZoom={2}
+              proOptions={{ hideAttribution: true }}
+              nodesDraggable={!isPresenting}
+              nodesConnectable={!isPresenting}
+              elementsSelectable={!isPresenting}
+              panOnDrag={!isPresenting}
+              zoomOnScroll={!isPresenting}
+              zoomOnDoubleClick={!isPresenting}
+            >
+              <Background color="#1e293b" gap={24} size={2} />
+              
+              {/* Hide controls during presentation */}
+              {!isPresenting && (
+                <>
+                  <Controls className="!bg-white/5 !border-white/10 !backdrop-blur-xl !shadow-sm !rounded-xl overflow-hidden [&>button]:!border-b [&>button]:!border-white/5 [&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button:hover]:!bg-white/10 [&>button:hover]:!text-white" />
+                  <MiniMap 
+                    className="!bg-[#0f172a]/90 !border-white/10 !backdrop-blur-xl !shadow-sm !rounded-xl"
+                    maskColor="rgba(15, 23, 42, 0.7)"
+                    nodeColor={(n: any) => {
+                      if (n.data?.category === 'root') return '#4f46e5';
+                      if (n.data?.category === 'inputs') return '#fb923c';
+                      if (n.data?.category === 'outputs') return '#34d399';
+                      if (n.data?.category === 'resources') return '#fbbf24';
+                      if (n.data?.category === 'people') return '#818cf8';
+                      if (n.data?.category === 'methods') return '#fb7185';
+                      if (n.data?.category === 'kpis') return '#a78bfa';
+                      return '#475569';
+                    }}
+                  />
+                </>
+              )}
+              {isPresenting && (
+                <Panel position="bottom-center" className="mb-6">
+                  <div className="flex items-center gap-4 bg-[#0f172a]/90 backdrop-blur-2xl border border-white/10 rounded-2xl px-6 py-3 shadow-2xl">
                     <span className="text-sm font-bold text-slate-200 uppercase tracking-widest mr-4">
                       Etapa {presentationIndex + 1} de {presentationPath.length}
                     </span>
+                    
+                    <div className="flex items-center gap-2 border-l border-white/10 pl-6">
+                      <button 
+                        onClick={prevSlide}
+                        disabled={presentationIndex === 0}
+                        className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                        <ChevronLeft size={24} />
+                      </button>
+                      <button 
+                        onClick={nextSlide}
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-full transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20"
+                      >
+                        {presentationIndex === presentationPath.length - 1 ? 'Concluir' : 'Próximo'}
+                        {presentationIndex !== presentationPath.length - 1 && <ChevronRight size={18} />}
+                      </button>
+                    </div>
+                    
+                    <div className="border-l border-white/10 pl-6 ml-2">
+                      <button 
+                        onClick={stopPresentation}
+                        className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-full transition-all"
+                        title="Encerrar"
+                      >
+                        <Square size={20} className="fill-current" />
+                      </button>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-center gap-2 border-l border-white/10 pl-6">
-                    <button 
-                      onClick={prevSlide}
-                      disabled={presentationIndex === 0}
-                      className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                    >
-                      <ChevronLeft size={24} />
-                    </button>
-                    <button 
-                      onClick={nextSlide}
-                      className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-full transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20"
-                    >
-                      {presentationIndex === presentationPath.length - 1 ? 'Concluir' : 'Próximo'}
-                      {presentationIndex !== presentationPath.length - 1 && <ChevronRight size={18} />}
-                    </button>
-                  </div>
-                  
-                  <div className="border-l border-white/10 pl-6 ml-2">
-                    <button 
-                      onClick={stopPresentation}
-                      className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-full transition-all"
-                      title="Encerrar"
-                    >
-                      <Square size={20} className="fill-current" />
-                    </button>
-                  </div>
-                </div>
-              </Panel>
-            )}
-
-          </ReactFlow>
+                </Panel>
+              )}
+            </ReactFlow>
+          ) : (
+            <div className="absolute inset-0">
+              <OperatorMode mapTitle={mapTitle} nodes={nodes} edges={edges} nodeDetailsMap={nodeDetailsMap} />
+            </div>
+          )}
         </div>
       </div>
 
