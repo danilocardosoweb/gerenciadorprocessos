@@ -227,7 +227,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   }, []);
 
   // ── Visibility filter ────────────────────────────────────────────────────
-  const visibleItems = (list: ProcessItem[]): ProcessItem[] => {
+  function filterByVisibility(list: ProcessItem[]): ProcessItem[] {
     if (!currentUser) return [];
     const isAdmin = currentUser.role === 'Administrador';
     return list.filter(item => {
@@ -239,10 +239,10 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
       const userMatch = (item.allowed_user_ids ?? []).includes(currentUser.id);
       return deptMatch || userMatch || item.created_by === currentUser.id;
     });
-  };
+  }
 
   const displayItems = currentFolder ? currentFolder.items || [] : items;
-  const visibleDisplayItems = visibleItems(displayItems);
+  const visibleDisplayItems = filterByVisibility(displayItems);
 
   const filteredItems = visibleDisplayItems.filter(item =>
     item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -377,7 +377,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   return (
     <>
     <MobileLayout currentUser={currentUser} onLogout={onLogout}>
-    <div className="w-full h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans overflow-hidden relative">
+    <div className="app-shell w-full h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans overflow-hidden relative" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', transition: 'background-color 0.3s ease, color 0.3s ease' }}>
       {/* Background Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[140px] pointer-events-none z-0"></div>
