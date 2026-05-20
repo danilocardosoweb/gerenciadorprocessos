@@ -135,7 +135,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
         .from('tasks')
         .select(`
           *,
-          assigned_user:users!tasks_assigned_to_fkey(name, email),
+          assigned_user:users!tasks_assigned_to_fkey(*),
           process_item:process_items(id, title, type),
           department_data:departments(id, name, color, icon)
         `)
@@ -172,7 +172,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, name, email, role');
+        .select('*');
       
       if (error) throw error;
       setUsers(data || []);
@@ -187,7 +187,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       const { data, error } = await supabase
         .from('departments')
         .select('*')
-        .order('name', { nullsFirst: false });
+        .order('created_at', { ascending: true });
       
       if (error) throw error;
       setDepartments(data || []);
@@ -334,7 +334,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const fetchComments = useCallback(async (taskId: string) => {
     const { data } = await supabase
       .from('task_comments')
-      .select('*, user:users!task_comments_user_id_fkey(name, email)')
+      .select('*, user:users!task_comments_user_id_fkey(*)')
       .eq('task_id', taskId)
       .order('created_at', { ascending: true });
     setComments(data || []);
@@ -343,7 +343,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const fetchAlerts = useCallback(async (taskId: string) => {
     const { data } = await supabase
       .from('task_alerts')
-      .select('*, from_user:users!task_alerts_from_user_id_fkey(name), to_user:users!task_alerts_to_user_id_fkey(name)')
+      .select('*, from_user:users!task_alerts_from_user_id_fkey(*), to_user:users!task_alerts_to_user_id_fkey(*)')
       .eq('task_id', taskId)
       .order('created_at', { ascending: false });
     setAlerts(data || []);
@@ -370,7 +370,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const sendComment = async () => {
     if (!(newComment || '').trim() || !detailTask || !currentUser) return;
     const payload = { task_id: detailTask.id, user_id: currentUser.id, content: (newComment || '').trim() };
-    const { data } = await supabase.from('task_comments').insert(payload).select('*, user:users!task_comments_user_id_fkey(name, email)').single();
+    const { data } = await supabase.from('task_comments').insert(payload).select('*, user:users!task_comments_user_id_fkey(*)').single();
     if (data) setComments(prev => [...prev, data]);
     setNewComment('');
   };
@@ -385,7 +385,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       type: newAlert.type,
     };
     const { data } = await supabase.from('task_alerts').insert(payload)
-      .select('*, from_user:users!task_alerts_from_user_id_fkey(name), to_user:users!task_alerts_to_user_id_fkey(name)').single();
+      .select('*, from_user:users!task_alerts_from_user_id_fkey(*), to_user:users!task_alerts_to_user_id_fkey(*)').single();
     if (data) setAlerts(prev => [data, ...prev]);
     setNewAlert({ message: '', to_user_id: '', type: 'info' });
   };

@@ -35,7 +35,7 @@ export function useUsers() {
     setError(null);
     const [{ data: usersData, error: usersErr }, { data: deptsData, error: deptsErr }] = await Promise.all([
       supabase.from('users').select('*').order('created_at', { ascending: false }),
-      supabase.from('departments').select('*').order('name', { nullsFirst: false }),
+      supabase.from('departments').select('*').order('created_at', { ascending: true }),
     ]);
     if (usersErr) {
       console.error('❌ useUsers fetchAll error:', usersErr);
