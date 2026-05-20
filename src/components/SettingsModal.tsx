@@ -866,26 +866,28 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="max-w-5xl h-full flex flex-col"
+                  className="max-w-5xl flex flex-col gap-4"
                 >
-                  <div className="flex items-center justify-between mb-6">
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
-                      <h3 className="text-2xl font-bold text-white">Log de Auditoria</h3>
-                      <p className="text-sm text-slate-400 mt-1">Histórico completo de ações dos usuários no sistema.</p>
+                      <h3 className="text-lg sm:text-2xl font-bold text-white">Log de Auditoria</h3>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-0.5">Histórico completo de ações dos usuários no sistema.</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-400">{totalCount} registros</span>
-                    </div>
+                    <span className="text-xs sm:text-sm text-slate-400 font-semibold shrink-0">
+                      {totalCount} registros
+                    </span>
                   </div>
 
                   {/* Filters & Actions */}
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
-                      <Filter size={16} className="text-slate-400" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Filter select */}
+                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 flex-1 min-w-[140px]">
+                      <Filter size={14} className="text-slate-400 shrink-0" />
                       <select
                         value={auditFilter}
                         onChange={(e) => setAuditFilter(e.target.value as any)}
-                        className="bg-transparent text-sm text-white outline-none"
+                        className="bg-transparent text-xs sm:text-sm text-white outline-none w-full"
                       >
                         <option value="" className="bg-slate-800">Todas categorias</option>
                         <option value="auth" className="bg-slate-800">Autenticação</option>
@@ -895,88 +897,113 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                         <option value="system" className="bg-slate-800">Sistema</option>
                       </select>
                     </div>
-                    <div className="flex-1"></div>
+                    {/* Action buttons */}
                     <button
                       onClick={downloadTxt}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-xl text-sm font-semibold transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-xl text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap"
+                      title="Exportar TXT"
                     >
-                      <FileText size={16} /> Exportar TXT
+                      <FileText size={14} />
+                      <span className="hidden sm:inline">Exportar </span>TXT
                     </button>
                     <button
                       onClick={downloadJson}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-xl text-sm font-semibold transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-xl text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap"
+                      title="Exportar JSON"
                     >
-                      <Download size={16} /> Exportar JSON
+                      <Download size={14} />
+                      <span className="hidden sm:inline">Exportar </span>JSON
                     </button>
                     <button
                       onClick={clearLogs}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-xl text-sm font-semibold transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-xl text-xs sm:text-sm font-semibold transition-colors"
+                      title="Limpar logs"
                     >
-                      <Trash size={16} /> Limpar
+                      <Trash size={14} />
+                      <span className="hidden sm:inline">Limpar</span>
                     </button>
                   </div>
 
-                  {/* Audit Log List */}
-                  <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col">
-                    <div className="overflow-auto flex-1 custom-scrollbar">
-                      {filteredLogs.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                          <ClipboardList size={48} className="mb-4 opacity-20" />
-                          <p>Nenhum registro de auditoria encontrado.</p>
-                          <p className="text-sm mt-1">Ações do sistema aparecerão aqui.</p>
-                        </div>
-                      ) : (
-                        <table className="w-full">
-                          <thead className="bg-white/5 sticky top-0">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Data/Hora</th>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Usuário</th>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Ação</th>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Categoria</th>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Detalhes</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                            {filteredLogs.slice().reverse().map((log) => (
-                              <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
-                                <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
-                                  {new Date(log.timestamp).toLocaleString('pt-BR')}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="text-sm text-white">{log.userName}</div>
-                                  <div className="text-xs text-slate-500">{log.userRole}</div>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-slate-300">{log.action}</td>
-                                <td className="px-4 py-3">
-                                  <span className={cn(
-                                    "inline-flex px-2 py-1 rounded-full text-xs font-medium",
-                                    log.category === 'auth' && "bg-purple-500/10 text-purple-400",
-                                    log.category === 'config' && "bg-blue-500/10 text-blue-400",
-                                    log.category === 'data' && "bg-amber-500/10 text-amber-400",
-                                    log.category === 'security' && "bg-red-500/10 text-red-400",
-                                    log.category === 'system' && "bg-emerald-500/10 text-emerald-400"
-                                  )}>
-                                    {log.category.toUpperCase()}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-slate-400 max-w-xs truncate" title={log.details}>
-                                  {log.details}
-                                </td>
+                  {/* Audit Log — cards on mobile, table on desktop */}
+                  <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+                    {filteredLogs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+                        <ClipboardList size={40} className="mb-3 opacity-20" />
+                        <p className="text-sm">Nenhum registro encontrado.</p>
+                        <p className="text-xs mt-1">Ações do sistema aparecerão aqui.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Desktop table */}
+                        <div className="hidden sm:block overflow-auto max-h-72 custom-scrollbar">
+                          <table className="w-full">
+                            <thead className="bg-white/5 sticky top-0">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Data/Hora</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Usuário</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Ação</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Categoria</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Detalhes</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {filteredLogs.slice().reverse().map((log) => (
+                                <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
+                                  <td className="px-4 py-3 text-xs text-slate-300 whitespace-nowrap">{new Date(log.timestamp).toLocaleString('pt-BR')}</td>
+                                  <td className="px-4 py-3">
+                                    <div className="text-sm text-white">{log.userName}</div>
+                                    <div className="text-xs text-slate-500">{log.userRole}</div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-slate-300">{log.action}</td>
+                                  <td className="px-4 py-3">
+                                    <span className={cn("inline-flex px-2 py-1 rounded-full text-xs font-medium",
+                                      log.category === 'auth' && "bg-purple-500/10 text-purple-400",
+                                      log.category === 'config' && "bg-blue-500/10 text-blue-400",
+                                      log.category === 'data' && "bg-amber-500/10 text-amber-400",
+                                      log.category === 'security' && "bg-red-500/10 text-red-400",
+                                      log.category === 'system' && "bg-emerald-500/10 text-emerald-400"
+                                    )}>{log.category.toUpperCase()}</span>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-slate-400 max-w-xs truncate" title={log.details}>{log.details}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Mobile cards */}
+                        <div className="sm:hidden divide-y divide-white/5 max-h-64 overflow-y-auto custom-scrollbar">
+                          {filteredLogs.slice().reverse().map((log) => (
+                            <div key={log.id} className="px-4 py-3 flex flex-col gap-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold",
+                                  log.category === 'auth' && "bg-purple-500/10 text-purple-400",
+                                  log.category === 'config' && "bg-blue-500/10 text-blue-400",
+                                  log.category === 'data' && "bg-amber-500/10 text-amber-400",
+                                  log.category === 'security' && "bg-red-500/10 text-red-400",
+                                  log.category === 'system' && "bg-emerald-500/10 text-emerald-400"
+                                )}>{log.category.toUpperCase()}</span>
+                                <span className="text-[10px] text-slate-500 shrink-0">{new Date(log.timestamp).toLocaleString('pt-BR')}</span>
+                              </div>
+                              <p className="text-sm font-semibold text-white leading-tight">{log.action}</p>
+                              <p className="text-xs text-slate-400 truncate">{log.details}</p>
+                              <p className="text-[10px] text-slate-500">{log.userName} · {log.userRole}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
 
-                  {/* Preview TXT */}
+                  {/* Preview TXT — collapsible */}
                   {filteredLogs.length > 0 && (
-                    <div className="mt-4 bg-black/30 border border-white/10 rounded-2xl p-4">
-                      <h4 className="text-sm font-bold text-slate-400 mb-2 flex items-center gap-2">
-                        <FileText size={14} /> Pré-visualização do relatório TXT
-                      </h4>
-                      <pre className="text-xs text-slate-500 font-mono whitespace-pre-wrap max-h-32 overflow-auto custom-scrollbar">
+                    <details className="bg-black/30 border border-white/10 rounded-2xl overflow-hidden">
+                      <summary className="px-4 py-3 text-xs sm:text-sm font-bold text-slate-400 flex items-center gap-2 cursor-pointer select-none list-none">
+                        <FileText size={13} /> Pré-visualização do relatório TXT
+                        <span className="ml-auto text-slate-600 text-[10px]">toque para expandir</span>
+                      </summary>
+                      <div className="px-4 pb-4">
+                        <pre className="text-[10px] sm:text-xs text-slate-500 font-mono whitespace-pre-wrap max-h-32 overflow-auto custom-scrollbar">
                         {`================================================================================
 RELATÓRIO DE AUDITORIA - TECNO MAPPER
 Total de registros: ${filteredLogs.length}
@@ -988,8 +1015,9 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
   Detalhes: ${log.details}`).join('\n\n')}
 
 ... e mais ${Math.max(0, filteredLogs.length - 5)} registros`}
-                      </pre>
-                    </div>
+                        </pre>
+                      </div>
+                    </details>
                   )}
                 </motion.div>
               )}
