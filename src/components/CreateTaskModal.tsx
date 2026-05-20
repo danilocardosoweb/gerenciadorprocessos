@@ -45,9 +45,11 @@ export function CreateTaskModal({
   useEffect(() => {
     if (!isOpen) return;
     Promise.all([
-      supabase.from('departments').select('id, name, color').order('name'),
-      supabase.from('users').select('id, name, email, role').order('name'),
-    ]).then(([{ data: depts }, { data: usrs }]) => {
+      supabase.from('departments').select('id, name, color').order('name', { nullsFirst: false }),
+      supabase.from('users').select('id, name, email, role').order('name', { nullsFirst: false }),
+    ]).then(([{ data: depts, error: deptsErr }, { data: usrs, error: usrsErr }]) => {
+      if (deptsErr) console.error('❌ Error fetching departments:', deptsErr);
+      if (usrsErr) console.error('❌ Error fetching users:', usrsErr);
       if (depts && depts.length > 0) setDepartments(depts);
       if (usrs && usrs.length > 0) setUsers(usrs);
     });

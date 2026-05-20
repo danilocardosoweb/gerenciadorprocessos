@@ -223,7 +223,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   const [allDepts, setAllDepts] = useState<{ id: string; name: string; color: string }[]>([]);
 
   useEffect(() => {
-    supabase.from('departments').select('id,name,color').order('name').then(({ data }) => {
+    supabase.from('departments').select('id,name,color').order('name', { nullsFirst: false }).then(({ data, error }) => {
+      if (error) console.error('❌ Error fetching departments:', error);
       if (data) setAllDepts(data);
     });
   }, []);

@@ -24,7 +24,8 @@ export function useAuditLog(enabled: boolean) {
       .select('*')
       .order('timestamp', { ascending: false })
       .limit(MAX_ENTRIES)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.error('❌ Error fetching audit logs:', error);
         if (data) {
           setLogs(data.map(r => ({
             id: r.id,

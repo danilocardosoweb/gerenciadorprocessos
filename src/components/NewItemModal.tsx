@@ -39,10 +39,12 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
   const [userDropOpen, setUserDropOpen] = useState(false);
 
   useEffect(() => {
-    supabase.from('departments').select('id,name,color').order('name').then(({ data }) => {
+    supabase.from('departments').select('id,name,color').order('name', { nullsFirst: false }).then(({ data, error }) => {
+      if (error) console.error('❌ Error fetching departments:', error);
       if (data) setAllDepartments(data);
     });
-    supabase.from('users').select('id,name,department').eq('status', 'Ativo').order('name').then(({ data }) => {
+    supabase.from('users').select('id,name,department').eq('status', 'Ativo').order('name', { nullsFirst: false }).then(({ data, error }) => {
+      if (error) console.error('❌ Error fetching users:', error);
       if (data) setAllUsers(data.filter(u => u.id !== currentUser?.id));
     });
   }, [currentUser?.id]);

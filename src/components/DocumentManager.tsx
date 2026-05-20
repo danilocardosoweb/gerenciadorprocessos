@@ -49,9 +49,11 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
   useEffect(() => {
     if (usersProp.length === 0 || deptsProp.length === 0) {
       Promise.all([
-        supabase.from('users').select('id, name, email, role').order('name'),
-        supabase.from('departments').select('id, name, color').order('name'),
-      ]).then(([{ data: u }, { data: d }]) => {
+        supabase.from('users').select('id, name, email, role').order('name', { nullsFirst: false }),
+        supabase.from('departments').select('id, name, color').order('name', { nullsFirst: false }),
+      ]).then(([{ data: u, error: uErr }, { data: d, error: dErr }]) => {
+        if (uErr) console.error('❌ Error fetching users:', uErr);
+        if (dErr) console.error('❌ Error fetching departments:', dErr);
         if (u) setUsers(u);
         if (d) setDepartments(d);
       });

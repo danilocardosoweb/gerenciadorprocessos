@@ -187,7 +187,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       const { data, error } = await supabase
         .from('departments')
         .select('*')
-        .order('name');
+        .order('name', { nullsFirst: false });
       
       if (error) throw error;
       setDepartments(data || []);
