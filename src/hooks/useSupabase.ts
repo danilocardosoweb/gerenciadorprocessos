@@ -62,28 +62,33 @@ export function useSupabase() {
   };
 
   const fetchDocuments = async () => {
-    const { data, error } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
-    if (error) {
-      console.error('Error fetching documents:', error);
-      return;
+    try {
+      const { data, error } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
+      if (error) {
+        console.error('❌ Error fetching documents:', error);
+        return;
+      }
+      
+      const docs = (data || []).map(doc => ({
+        id: doc.id,
+        name: doc.name,
+        type: doc.type,
+        size: doc.size,
+        uploadDate: doc.upload_date,
+        expirationDate: doc.expiration_date,
+        status: doc.status,
+        visibility: doc.visibility || 'public',
+        department: doc.department || undefined,
+        specific_user_id: doc.specific_user_id || null,
+        created_by: doc.created_by || null,
+      }));
+      
+      console.log('✅ Fetched documents from Supabase:', docs);
+      setDocuments(docs);
+    } catch (err) {
+      console.error('❌ Exception fetching documents:', err);
+      setDocuments([]);
     }
-    
-    // Transform camelCase logic for the local state if needed (db uses snake_case, but we can map)
-    const docs = data.map(doc => ({
-      id: doc.id,
-      name: doc.name,
-      type: doc.type,
-      size: doc.size,
-      uploadDate: doc.upload_date,
-      expirationDate: doc.expiration_date,
-      status: doc.status,
-      visibility: doc.visibility || 'public',
-      department: doc.department || undefined,
-      specific_user_id: doc.specific_user_id || null,
-      created_by: doc.created_by || null,
-    }));
-    
-    setDocuments(docs);
   };
 
   const fetchRoles = async () => {
