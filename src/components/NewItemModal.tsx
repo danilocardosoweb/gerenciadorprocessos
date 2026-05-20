@@ -145,7 +145,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-1.5">Título</label>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)}
+            <input type="text" autoComplete="off" value={title} onChange={e => setTitle(e.target.value)}
               placeholder="Ex: Processo Comercial — Vendas B2B"
               className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/40 transition-all placeholder:text-slate-600"
               autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()}

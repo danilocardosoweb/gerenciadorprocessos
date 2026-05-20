@@ -338,7 +338,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
   }, [view, canAdvance, handleNext, handleBack, searchOpen]);
 
   return (
-    <div className="absolute inset-0 bg-[#060d1a] text-white flex flex-col overflow-hidden">
+    <div className="absolute inset-0 bg-[#060d1a] text-white flex flex-col">
 
       {/* ══════════════ HOME SCREEN ══════════════ */}
       <AnimatePresence mode="wait">
@@ -348,7 +348,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col overflow-hidden"
+            className="absolute inset-0 flex flex-col overflow-y-auto"
           >
             {/* decorative bg */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -357,7 +357,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
             </div>
 
             {/* hero */}
-            <div className="relative flex flex-col items-center justify-center flex-1 px-8 text-center">
+            <div className="relative flex flex-col items-center justify-center min-h-full px-6 sm:px-8 text-center py-10">
               <p className="text-[10px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-2">Modo Operador · Execução Guiada</p>
               <h1 
                 className="font-black text-white leading-tight max-w-4xl"
@@ -397,7 +397,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
               </div>
 
               {/* phase cards */}
-              <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 w-full max-w-5xl">
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 w-full max-w-5xl">
                 {phases.map((phase, index) => (
                   <button
                     key={phase.id}
@@ -416,7 +416,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
             </div>
 
             {/* bottom hint */}
-            <div className="relative text-center pb-6 text-xs text-slate-600">
+            <div className="relative text-center pt-4 pb-8 text-xs text-slate-600">
               Use as setas ← → do teclado ou toque nos botões para navegar
             </div>
           </motion.div>
@@ -965,6 +965,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                 <Search size={20} className="text-slate-400 shrink-0" />
                 <input
                   autoFocus
+                  autoComplete="off"
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}

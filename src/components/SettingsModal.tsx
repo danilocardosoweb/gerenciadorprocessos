@@ -327,7 +327,8 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                       <div className="relative flex-1 max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input 
-                          type="text" 
+                          type="text"
+                          autoComplete="off"
                           placeholder="Buscar usuário..." 
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
@@ -449,7 +450,8 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                       <div>
                         <label className="block text-sm font-semibold text-slate-300 mb-2">Nome Completo</label>
                         <input 
-                          type="text" 
+                          type="text"
+                          autoComplete="off"
                           value={userName}
                           onChange={(e) => setUserName(e.target.value)}
                           placeholder="Ex: João Silva"
@@ -459,7 +461,8 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                       <div>
                         <label className="block text-sm font-semibold text-slate-300 mb-2">Email</label>
                         <input 
-                          type="email" 
+                          type="email"
+                          autoComplete="off"
                           value={userEmail}
                           onChange={(e) => setUserEmail(e.target.value)}
                           placeholder="Ex: joao@empresa.com"
@@ -471,7 +474,8 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           {activeView === 'edit_user' ? 'Nova Senha (opcional)' : 'Senha'}
                         </label>
                         <input 
-                          type="password" 
+                          type="password"
+                          autoComplete="new-password"
                           value={userPassword}
                           onChange={(e) => setUserPassword(e.target.value)}
                           placeholder={activeView === 'edit_user' ? 'Deixe em branco para manter a atual' : 'Defina uma senha'}
@@ -682,7 +686,8 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                     <div>
                       <label className="block text-sm font-semibold text-slate-300 mb-2">Nome da Função</label>
                       <input 
-                        type="text" 
+                        type="text"
+                        autoComplete="off"
                         value={roleName}
                         onChange={(e) => setRoleName(e.target.value)}
                         placeholder="Ex: Analista de Qualidade"
@@ -1143,6 +1148,7 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                       <label className="block text-sm font-medium text-slate-300 mb-2">Nome do Departamento</label>
                       <input
                         type="text"
+                        autoComplete="off"
                         value={newDepartment.name}
                         onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
                         placeholder="Ex: Produção"
@@ -1172,6 +1178,7 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                         />
                         <input
                           type="text"
+                          autoComplete="off"
                           value={newDepartment.color}
                           onChange={(e) => setNewDepartment({ ...newDepartment, color: e.target.value })}
                           placeholder="#3b82f6"

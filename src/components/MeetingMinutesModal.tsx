@@ -481,28 +481,31 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <input value={meetingTitle} onChange={e => setMeetingTitle(e.target.value)}
+                        autoComplete="off"
                         placeholder="Título da ata..."
                         className="w-full px-4 py-2.5 bg-white/5 border border-white/10 focus:border-blue-500/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none" />
                     </div>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Data</label>
-                      <input type="date" value={meetingDate} onChange={e => setMeetingDate(e.target.value)}
+                      <input type="date" autoComplete="off" value={meetingDate} onChange={e => setMeetingDate(e.target.value)}
                         className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500/50" />
                     </div>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Horário</label>
-                      <input type="time" value={meetingTime} onChange={e => setMeetingTime(e.target.value)}
+                      <input type="time" autoComplete="off" value={meetingTime} onChange={e => setMeetingTime(e.target.value)}
                         className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500/50" />
                     </div>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Local / Plataforma</label>
                       <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
+                        autoComplete="off"
                         placeholder="Ex: Sala 3, Google Meet..."
                         className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500/50" />
                     </div>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Participantes</label>
                       <input value={attendees} onChange={e => setAttendees(e.target.value)}
+                        autoComplete="off"
                         placeholder="Ex: João, Maria, Carlos..."
                         className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500/50" />
                     </div>

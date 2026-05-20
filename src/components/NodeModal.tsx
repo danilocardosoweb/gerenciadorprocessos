@@ -258,6 +258,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                     <div className="flex gap-2">
                       <input
                         type="text"
+                        autoComplete="off"
                         value={urlInput}
                         onChange={e => { setUrlInput(e.target.value); setUrlError(''); }}
                         onKeyDown={e => e.key === 'Enter' && handleAddUrl()}

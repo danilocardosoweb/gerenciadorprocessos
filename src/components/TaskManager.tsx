@@ -581,7 +581,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
           {/* Search */}
           <div className="relative flex-1 min-w-[120px] md:flex-initial">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input type="text" placeholder="Buscar..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            <input type="text" autoComplete="off" placeholder="Buscar..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full md:w-36 pl-8 pr-3 py-1.5 bg-white/[0.04] border border-white/[0.06] hover:border-white/10 rounded-xl text-xs sm:text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40 transition-all" />
           </div>
 

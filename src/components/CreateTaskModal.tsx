@@ -234,6 +234,7 @@ export function CreateTaskModal({
             </label>
             <input
               type="text"
+              autoComplete="off"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Digite o título da tarefa..."
@@ -552,6 +553,7 @@ export function CreateTaskModal({
               </label>
               <input
                 type="date"
+                autoComplete="off"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500/50"
@@ -566,6 +568,7 @@ export function CreateTaskModal({
               </label>
               <input
                 type="number"
+                autoComplete="off"
                 min="0"
                 value={estimatedHours}
                 onChange={(e) => setEstimatedHours(e.target.value)}
