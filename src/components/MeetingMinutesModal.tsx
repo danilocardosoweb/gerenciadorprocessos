@@ -5,7 +5,7 @@ import {
   X, FileText, Mail, Download, Copy, Check, ChevronDown,
   Calendar, Clock, Users, AlertCircle, CheckCircle2, Circle,
   ArrowRight, Building2, Sparkles, Printer, Eye, Edit3,
-  Flag, Zap, Target, TrendingUp
+  Flag, Zap, Target, TrendingUp, Send, Plus, CalendarPlus, Trash2, AtSign
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -43,8 +43,12 @@ const statusIcon: Record<string, string> = {
 };
 
 export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: MeetingMinutesModalProps) {
-  const [step, setStep] = useState<'config' | 'preview'>('config');
+  const [step, setStep] = useState<'config' | 'preview' | 'send'>('config');
   const [copied, setCopied] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [toList, setToList] = useState<string[]>([]);
+  const [toInput, setToInput] = useState('');
+  const [ccInput, setCcInput] = useState('');
 
   // Config state
   const [meetingTitle, setMeetingTitle] = useState('Ata de Reunião – Status das Tarefas');
@@ -228,16 +232,106 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
     setTimeout(() => { w.print(); }, 400);
   };
 
-  const handleMailto = () => {
-    const subject = encodeURIComponent(meetingTitle);
-    const body = encodeURIComponent(`Segue em anexo a ata de reunião gerada em ${new Date().toLocaleDateString('pt-BR')}.\n\nPara visualizar corretamente, abra o arquivo HTML anexo.\n\n— ${currentUser?.name}`);
-    window.open(`mailto:?subject=${subject}&body=${body}`);
+  // ── Calendar invite (.ics) ─────────────────────────────────────────────
+  const handleDownloadICS = () => {
+    const dtStart = new Date(`${meetingDate}T${meetingTime || '09:00'}:00`);
+    const dtEnd   = new Date(dtStart.getTime() + 60 * 60 * 1000); // +1h
+    const fmt = (d: Date) =>
+      d.toISOString().replace(/[-:]/g, '').replace('.000', '');
+    const attendeeLines = toList
+      .map(e => `ATTENDEE;RSVP=TRUE;ROLE=REQ-PARTICIPANT:mailto:${e}`)
+      .join('\n');
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//TecnoMapper//Meeting//PT',
+      'CALSCALE:GREGORIAN',
+      'METHOD:REQUEST',
+      'BEGIN:VEVENT',
+      `UID:tecno-mapper-${Date.now()}@tecnoperfilalumino.com.br`,
+      `DTSTAMP:${fmt(new Date())}`,
+      `DTSTART:${fmt(dtStart)}`,
+      `DTEND:${fmt(dtEnd)}`,
+      `SUMMARY:${meetingTitle}`,
+      meetingLocation ? `LOCATION:${meetingLocation}` : '',
+      `DESCRIPTION:Ata de Reunião gerada pelo Tecno Mapper.\nParticipantes: ${attendees || 'N/A'}\nResponsável: ${currentUser?.name || 'Sistema'}`,
+      `ORGANIZER;CN=${currentUser?.name || 'Sistema'}:mailto:${currentUser?.email || 'sistema@tecnomapper.com'}`,
+      attendeeLines,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].filter(Boolean).join('\r\n');
+
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `convite-reuniao-${meetingDate}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Download .eml (opens directly in Outlook / Thunderbird / Apple Mail) ─
+  const handleDownloadEML = () => {
+    const html    = getEmailHTML();
+    const from    = currentUser?.email || 'sistema@tecnomapper.com';
+    const fromName = currentUser?.name  || 'Tecno Mapper';
+    const to      = toList.join(', ');
+    const cc      = ccInput.trim();
+    const subject = meetingTitle;
+    const dateStr = new Date().toUTCString();
+    const boundary = `----=_TecnoMapper_${Date.now()}`;
+
+    const eml = [
+      `MIME-Version: 1.0`,
+      `Date: ${dateStr}`,
+      `From: "${fromName}" <${from}>`,
+      to   ? `To: ${to}`      : '',
+      cc   ? `Cc: ${cc}`      : '',
+      `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/plain; charset=UTF-8`,
+      `Content-Transfer-Encoding: quoted-printable`,
+      ``,
+      `Ol=C3=A1,`,
+      ``,
+      `Segue a ata de reuni=C3=A3o "${subject}" realizada em ${new Date(meetingDate + 'T12:00:00').toLocaleDateString('pt-BR')}.`,
+      ``,
+      `Atenciosamente,`,
+      `${fromName}`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/html; charset=UTF-8`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      // Split base64 into 76-char lines (RFC 2045)
+      btoa(unescape(encodeURIComponent(html))).match(/.{1,76}/g)?.join('\r\n') || '',
+      ``,
+      `--${boundary}--`,
+    ].filter(l => l !== null && l !== undefined && !(l === '' && false)).join('\r\n');
+
+    const blob = new Blob([eml], { type: 'message/rfc822' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `ata-reuniao-${meetingDate}.eml`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setCopiedEmail(true);
+    setTimeout(() => setCopiedEmail(false), 3000);
+  };
+
+  const addTo = () => {
+    const emails = toInput.split(/[,;\s]+/).map(e => e.trim()).filter(e => e.includes('@'));
+    if (emails.length) { setToList(prev => [...new Set([...prev, ...emails])]); setToInput(''); }
   };
 
   if (!isOpen) return null;
 
   const groups = groupedTasks();
   const allStatuses = ['backlog', 'todo', 'in_progress', 'review', 'done'];
+  const readyToSend = toList.length > 0;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -274,6 +368,9 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
               </button>
               <button onClick={() => setStep('preview')} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all', step === 'preview' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white')}>
                 <Eye size={12} /> Preview
+              </button>
+              <button onClick={() => setStep('send')} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all', step === 'send' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white')}>
+                <Send size={12} /> Enviar
               </button>
             </div>
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
@@ -482,6 +579,93 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                 </div>
               </motion.div>
             )}
+            {/* Send step */}
+            {step === 'send' && (
+              <motion.div key="send" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} className="flex-1 overflow-y-auto p-6 space-y-5">
+
+                {/* Intro */}
+                <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                  <Mail size={18} className="text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-blue-300">E-mail 100% formatado (.eml)</p>
+                    <p className="text-xs text-slate-400 mt-1">Gera um arquivo <strong className="text-slate-300">.eml</strong> com o corpo HTML completo e formatado, destinatários, Cc, assunto e remetente já preenchidos. Ao abrir, o Outlook, Thunderbird ou Apple Mail mostra o e-mail pronto — basta clicar em Enviar.</p>
+                  </div>
+                </div>
+
+                {/* To field */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <AtSign size={11} />Para (destinatários)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={toInput}
+                      onChange={e => setToInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTo(); } }}
+                      placeholder="email@empresa.com — Enter ou vírgula para adicionar"
+                      className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 focus:border-blue-500/50 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none"
+                    />
+                    <button onClick={addTo} className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  {/* Chips */}
+                  {toList.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {toList.map(email => (
+                        <span key={email} className="flex items-center gap-1.5 text-xs bg-blue-500/15 text-blue-300 border border-blue-500/25 px-2.5 py-1 rounded-full">
+                          {email}
+                          <button onClick={() => setToList(prev => prev.filter(e => e !== email))} className="hover:text-red-400 transition-colors">
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* CC */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Cc (opcional)</label>
+                  <input
+                    value={ccInput}
+                    onChange={e => setCcInput(e.target.value)}
+                    placeholder="cc@empresa.com, outro@empresa.com"
+                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 focus:border-blue-500/50 rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none"
+                  />
+                </div>
+
+                {/* Subject preview */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Assunto</label>
+                  <div className="px-4 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-slate-300">{meetingTitle}</div>
+                </div>
+
+                {/* Email body preview card */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Eye size={11} />Preview do Corpo do E-mail
+                  </label>
+                  <div className="rounded-xl border border-white/[0.06] bg-white overflow-hidden" style={{ maxHeight: 280, overflowY: 'auto' }}>
+                    <div dangerouslySetInnerHTML={{ __html: getEmailHTML() }} />
+                  </div>
+                </div>
+
+                {/* Calendar invite */}
+                <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl flex items-start gap-3">
+                  <CalendarPlus size={18} className="text-violet-400 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-violet-300">Convite de Agenda (.ics)</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Gera um arquivo .ics compatível com Outlook, Google Calendar, Apple Calendar e qualquer cliente de agenda.</p>
+                  </div>
+                  <button onClick={handleDownloadICS}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold rounded-xl transition-colors">
+                    <Download size={13} /> Baixar .ics
+                  </button>
+                </div>
+
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
@@ -492,12 +676,13 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
             {filteredTasks.length} tarefas · {Object.keys(groups).length} grupos
           </div>
           <div className="flex items-center gap-2">
-            {step === 'config' ? (
+            {step === 'config' && (
               <button onClick={() => setStep('preview')}
                 className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-colors">
                 <Eye size={14} /> Ver Preview <ArrowRight size={13} />
               </button>
-            ) : (
+            )}
+            {step === 'preview' && (
               <>
                 <button onClick={handlePrint} title="Imprimir / Salvar PDF"
                   className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-semibold rounded-xl transition-colors">
@@ -512,9 +697,31 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                     copied ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300')}>
                   {copied ? <><Check size={13} /> Copiado!</> : <><Copy size={13} /> Copiar HTML</>}
                 </button>
-                <button onClick={handleMailto}
+                <button onClick={() => setStep('send')}
                   className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors">
-                  <Mail size={14} /> Enviar por E-mail
+                  <Send size={14} /> Enviar <ArrowRight size={13} />
+                </button>
+              </>
+            )}
+            {step === 'send' && (
+              <>
+                <button onClick={handleDownloadICS}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-violet-600/80 hover:bg-violet-500 border border-violet-500/40 text-white text-xs font-semibold rounded-xl transition-colors">
+                  <CalendarPlus size={13} /> Convidar Agenda
+                </button>
+                <button
+                  onClick={handleDownloadEML}
+                  disabled={!readyToSend}
+                  className={cn('flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all',
+                    readyToSend
+                      ? copiedEmail
+                        ? 'bg-emerald-600 text-white cursor-default'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                      : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/10'
+                  )}>
+                  {copiedEmail
+                    ? <><Check size={14} /> E-mail gerado! Abra o arquivo .eml</>
+                    : <><Mail size={14} /> Gerar E-mail (.eml)</>}
                 </button>
               </>
             )}

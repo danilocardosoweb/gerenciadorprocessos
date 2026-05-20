@@ -17,6 +17,7 @@ import { CreateTaskModal } from './CreateTaskModal';
 import { ConfirmModal } from './ConfirmModal';
 import { MeetingMinutesModal } from './MeetingMinutesModal';
 import { usePermissions } from '../lib/permissions';
+import { useQuickPeek } from './TaskQuickPeek';
 
 // Types
 interface Department {
@@ -116,6 +117,9 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const canApprove  = perms.can.approveTask;
   const canAssign   = perms.can.assignTask;
   const canMinutes  = perms.can.generateMinutes;
+
+  // Quick Peek
+  const { hoverProps, previewButton, portal: quickPeekPortal } = useQuickPeek();
 
   // Fetch tasks, users and departments
   useEffect(() => {
@@ -437,6 +441,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
         onDragStart={(e) => handleDragStart(e, task.id)}
         onDragEnd={handleDragEnd}
         onClick={handleClick}
+        {...hoverProps(task)}
       >
         {/* Priority accent bar */}
         <div className={cn('absolute top-0 left-0 w-full h-0.5 rounded-t-2xl opacity-60 transition-opacity group-hover:opacity-100', priority.bar)} />
@@ -457,6 +462,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {previewButton(task)}
             {canDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id, task.title); }}
@@ -1174,6 +1180,9 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
         </>,
         document.body
       )}
+
+      {/* Quick Peek portal (tooltip + modal) */}
+      {quickPeekPortal}
     </div>
   );
 }
