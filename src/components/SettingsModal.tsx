@@ -211,7 +211,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     setActiveView('edit_role');
   };
 
-  const filteredUsers = users.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredUsers = users.filter(u => (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <>

@@ -203,7 +203,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       if (filterStatus !== 'all' && task.status !== filterStatus) return false;
       if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
       if (filterDepartment !== 'all' && task.department_id !== filterDepartment) return false;
-      if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (searchQuery && !(task.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
       
       // Visibility filter
       if (task.visibility === 'private' && task.created_by !== currentUser?.id) return false;

@@ -59,7 +59,7 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
   }, []);
 
   const filteredDocs = documents.filter(doc => {
-    if (!doc.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (!(doc.name || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
     // Visibility filter
     if (doc.visibility === 'private' && doc.created_by !== currentUser?.id) return false;
     if (doc.visibility === 'specific') {

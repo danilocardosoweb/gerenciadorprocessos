@@ -270,8 +270,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   const visibleDisplayItems = filterByVisibility(displayItems);
 
   const filteredItems = visibleDisplayItems.filter(item =>
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.description.toLowerCase().includes(searchQuery.toLowerCase())
+    (item.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getCountByType = (type: string) => {
