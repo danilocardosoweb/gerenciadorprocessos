@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Info, ImagePlus, Plus, CheckCircle2, Circle, UploadCloud, Trash2, MessageSquare } from 'lucide-react';
+import { X, Info, ImagePlus, Plus, CheckCircle2, Circle, UploadCloud, Trash2, MessageSquare, Link, Video } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useComments } from '../hooks/useComments';
 import { CommentsPanel } from './CommentsPanel';
@@ -31,6 +31,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [urlError, setUrlError] = useState('');
 
   // Comments functionality
   const {
@@ -68,13 +70,28 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
   };
 
   const handleFiles = (files: FileList) => {
-    // Convert files to object URLs for preview
     const newImages = Array.from(files).map((file) => URL.createObjectURL(file));
     onUpdateDetails(nodeId, {
       ...details,
       images: [...details.images, ...newImages],
     });
   };
+
+  const handleAddUrl = () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    try {
+      new URL(url);
+      setUrlError('');
+      onUpdateDetails(nodeId, { ...details, images: [...details.images, url] });
+      setUrlInput('');
+    } catch {
+      setUrlError('URL inválida. Use http:// ou https://');
+    }
+  };
+
+  const isVideo = (src: string) => /\.(mp4|webm|ogg)$/i.test(src);
+  const isGif   = (src: string) => /\.gif$/i.test(src);
 
   const removeImage = (index: number) => {
     const newImages = [...details.images];
@@ -213,7 +230,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                   {/* Dropzone */}
                   <div
                     className={cn(
-                      "w-full p-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center transition-colors cursor-pointer",
+                      "w-full p-5 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center transition-colors cursor-pointer",
                       dragActive ? "border-blue-400 bg-blue-500/10" : "border-white/20 bg-white/5 hover:bg-white/10"
                     )}
                     onDragEnter={handleDrag}
@@ -222,39 +239,81 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <UploadCloud size={32} className={dragActive ? "text-blue-400 mb-3" : "text-slate-400 mb-3"} />
-                    <p className="text-sm text-slate-300 font-medium mb-1">
-                      Arraste imagens ou clique
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Suporta PNG, JPG, GIF
-                    </p>
+                    <UploadCloud size={28} className={dragActive ? "text-blue-400 mb-2" : "text-slate-400 mb-2"} />
+                    <p className="text-sm text-slate-300 font-medium mb-0.5">Arraste ou clique para enviar</p>
+                    <p className="text-xs text-slate-500">PNG · JPG · GIF · MP4 · WebM</p>
                     <input
                       ref={fileInputRef}
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept="image/*,video/mp4,video/webm,video/ogg"
                       onChange={handleChange}
                       className="hidden"
                     />
                   </div>
 
-                  {/* Image Grid */}
-                  <div className="grid grid-cols-2 gap-3 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
-                    {details.images.map((src, idx) => (
-                      <div key={idx} className="relative group rounded-xl overflow-hidden aspect-video bg-black/50 border border-white/10">
-                        <img src={src} alt="Evidence" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
-                            className="p-2 bg-rose-500/80 text-white rounded-full hover:bg-rose-500 transition-colors"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                  {/* URL input */}
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold flex items-center gap-1"><Link size={10} /> Ou cole uma URL (imagem · GIF · vídeo)</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={urlInput}
+                        onChange={e => { setUrlInput(e.target.value); setUrlError(''); }}
+                        onKeyDown={e => e.key === 'Enter' && handleAddUrl()}
+                        placeholder="https://example.com/referencia.jpg"
+                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 outline-none focus:border-blue-500/50 focus:bg-white/8 transition-colors"
+                      />
+                      <button
+                        onClick={handleAddUrl}
+                        className="px-3 py-2 rounded-xl bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-bold hover:bg-blue-500/30 transition-colors"
+                      >Adicionar</button>
+                    </div>
+                    {urlError && <p className="text-[10px] text-red-400">{urlError}</p>}
                   </div>
+
+                  {/* Media Grid */}
+                  {details.images.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 overflow-y-auto max-h-[380px] pr-1 custom-scrollbar">
+                      {details.images.map((src, idx) => (
+                        <div key={idx} className="relative group rounded-xl overflow-hidden aspect-video bg-black/50 border border-white/10">
+                          {/* type badge */}
+                          <div className="absolute top-1.5 left-1.5 z-10">
+                            {isVideo(src) && (
+                              <span className="flex items-center gap-1 text-[9px] font-bold bg-purple-500/70 text-white px-1.5 py-0.5 rounded-md backdrop-blur-sm">
+                                <Video size={9} /> Vídeo
+                              </span>
+                            )}
+                            {isGif(src) && (
+                              <span className="text-[9px] font-bold bg-pink-500/70 text-white px-1.5 py-0.5 rounded-md backdrop-blur-sm">GIF</span>
+                            )}
+                          </div>
+                          {/* media */}
+                          {isVideo(src) ? (
+                            <video src={src} autoPlay loop muted playsInline className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                          ) : (
+                            <img src={src} alt="Evidence" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                          )}
+                          {/* order badge */}
+                          <div className="absolute top-1.5 right-1.5 z-10">
+                            <span className="text-[9px] font-black text-white bg-black/50 px-1.5 py-0.5 rounded-md backdrop-blur-sm">#{idx + 1}</span>
+                          </div>
+                          {/* delete overlay */}
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
+                              className="p-2 bg-rose-500/90 text-white rounded-full hover:bg-rose-500 transition-colors"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {details.images.length === 0 && (
+                    <p className="text-[11px] text-slate-600 text-center py-2">Nenhuma mídia adicionada ainda.</p>
+                  )}
                 </div>
               </div>
 

@@ -473,49 +473,65 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
       <div className="flex-1 h-full relative z-10 w-full flex flex-col">
         {/* Map Header when not presenting */}
         {!isPresenting && (
-          <div className="h-20 flex items-center px-6 bg-white/[0.02] backdrop-blur-xl border-b border-white/5 shrink-0 z-20 gap-6">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center px-3 sm:px-6 bg-white/[0.02] backdrop-blur-xl border-b border-white/5 shrink-0 z-20 gap-2 sm:gap-4 min-h-[56px] sm:h-16 lg:h-20">
+            {/* Back + Title */}
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0 shrink-0">
               <button 
                 onClick={onBack}
-                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors shrink-0"
                 title="Voltar ao Dashboard"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={16} />
               </button>
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase tracking-[0.4em] font-semibold m-0">Procedimento</p>
-                <h1 className="text-xl font-bold tracking-tight text-white m-0 leading-tight">
+              <div className="min-w-0 hidden sm:block">
+                <p className="text-[9px] text-slate-400 uppercase tracking-[0.4em] font-semibold m-0">Procedimento</p>
+                <h1 className="text-base lg:text-xl font-bold tracking-tight text-white m-0 leading-tight truncate max-w-[160px] lg:max-w-none">
                   {mapTitle}
                 </h1>
               </div>
             </div>
 
+            {/* Mode toggle — center */}
             <div className="flex-1 flex justify-center">
-              <div className="bg-slate-900/60 border border-white/10 rounded-full p-1 flex items-center text-sm">
+              <div className="relative flex items-center bg-[#0a1628] border border-white/10 rounded-xl p-0.5 gap-0 shadow-xl">
+                {/* sliding indicator */}
+                <div
+                  className={`absolute top-0.5 bottom-0.5 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                    viewMode === 'operator'
+                      ? 'left-0.5 right-[calc(50%+1px)] bg-gradient-to-r from-blue-600 to-blue-500 shadow-[0_0_16px_rgba(59,130,246,0.5)]'
+                      : 'left-[calc(50%+1px)] right-0.5 bg-gradient-to-r from-slate-100 to-white shadow-[0_2px_12px_rgba(0,0,0,0.4)]'
+                  }`}
+                />
                 <button
                   onClick={() => setViewMode('operator')}
-                  className={`${viewMode === 'operator' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-300 hover:text-white'} px-6 py-2 rounded-full font-semibold transition-colors flex items-center gap-2`}
+                  className="relative z-10 flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors duration-200 select-none whitespace-nowrap"
+                  style={{ color: viewMode === 'operator' ? '#fff' : 'rgb(148,163,184)' }}
                 >
-                  <Square size={14} /> Modo Operador
+                  <Square size={11} strokeWidth={2.5} />
+                  <span className="hidden xs:inline">Modo </span>Operador
                 </button>
                 <button
                   onClick={() => setViewMode('technical')}
-                  className={`${viewMode === 'technical' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-300 hover:text-white'} px-6 py-2 rounded-full font-semibold transition-colors flex items-center gap-2`}
+                  className="relative z-10 flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors duration-200 select-none whitespace-nowrap"
+                  style={{ color: viewMode === 'technical' ? '#0f172a' : 'rgb(148,163,184)' }}
                 >
-                  <Target size={14} /> Modo Técnico
+                  <Target size={11} strokeWidth={2.5} />
+                  <span className="hidden xs:inline">Modo </span>Técnico
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 pointer-events-auto">
+            {/* Action buttons — hidden labels on mobile, icon-only */}
+            <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto shrink-0">
               {viewMode === 'technical' ? (
                 <>
                   <button
                     onClick={() => setIsSearchOpen(true)}
-                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
-                    title="Buscar no mapa (Ctrl+F)"
+                    className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 flex items-center justify-center gap-2 bg-white/5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 transition-colors"
+                    title="Buscar (Ctrl+F)"
                   >
-                    <Search size={16} /> Buscar
+                    <Search size={15} />
+                    <span className="hidden lg:inline text-sm font-medium">Buscar</span>
                   </button>
                   <button
                     onClick={() => {
@@ -532,41 +548,47 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                         alert('Versão salva com sucesso!');
                       }
                     }}
-                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
-                    title="Salvar versão atual"
+                    className="hidden sm:flex w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 items-center justify-center gap-2 bg-white/5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 transition-colors"
+                    title="Salvar versão"
                   >
-                    <Save size={16} /> Salvar Versão
+                    <Save size={15} />
+                    <span className="hidden lg:inline text-sm font-medium">Salvar</span>
                   </button>
                   <button
                     onClick={() => setIsVersionPanelOpen(true)}
-                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors relative"
+                    className="hidden md:flex relative w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 items-center justify-center gap-2 bg-white/5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 transition-colors"
                     title="Histórico de versões"
                   >
-                    <History size={16} /> Versões
+                    <History size={15} />
+                    <span className="hidden lg:inline text-sm font-medium">Versões</span>
                     {versionCount > 0 && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[10px] rounded-full flex items-center justify-center">
                         {versionCount}
                       </span>
                     )}
                   </button>
                   <button
                     onClick={startPresentation}
-                    className="bg-emerald-500/20 px-4 py-2 rounded-xl shadow-sm border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 flex items-center gap-2 transition-colors"
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
                   >
                     <Play size={16} /> Apresentar
                   </button>
                   <button 
                     onClick={() => setIsAddModalOpen(true)}
-                    className="bg-white/5 px-4 py-2 rounded-xl shadow-sm border border-white/10 text-sm font-medium text-slate-300 hover:bg-white/10 flex items-center gap-2 transition-colors"
+                    className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 flex items-center justify-center gap-2 bg-white/5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 transition-colors"
+                    title="Adicionar nó"
                   >
-                    <Plus size={16} /> Adicionar
+                    <Plus size={15} />
+                    <span className="hidden lg:inline text-sm font-medium">Adicionar</span>
                   </button>
                   <div className="relative" ref={exportMenuRef}>
                     <button
                       onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                      className="bg-blue-600 px-4 py-2 rounded-xl shadow-sm border border-blue-500 text-sm font-medium text-white hover:bg-blue-500 flex items-center gap-2 transition-colors"
+                      className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 flex items-center justify-center gap-2 bg-blue-600 rounded-xl border border-blue-500 text-white hover:bg-blue-500 transition-colors"
+                      title="Exportar"
                     >
-                      <Download size={16} /> Exportar
+                      <Download size={15} />
+                      <span className="hidden lg:inline text-sm font-medium">Exportar</span>
                     </button>
                     {isExportMenuOpen && (
                       <div className="absolute right-0 top-full mt-2 w-56 bg-[#0f172a] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
@@ -608,11 +630,8 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                   </div>
                 </>
               ) : (
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="text-[10px] uppercase tracking-[0.4em] text-blue-300">Fluxo guiado</p>
-                    <p className="text-sm text-slate-300">Operação simplificada para tablets</p>
-                  </div>
+                <div className="hidden sm:flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-widest text-blue-300 font-bold whitespace-nowrap">Fluxo Guiado</span>
                 </div>
               )}
             </div>

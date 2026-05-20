@@ -1,6 +1,6 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, ArrowRight, CheckCircle2, Play, Volume2, Maximize2, Home, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Play, Maximize2, Home, ChevronLeft, ChevronRight, Search, X, ZoomIn, ZoomOut, RotateCcw, Video, Image as ImageIcon, Layers } from 'lucide-react';
 import { Edge, Node } from '@xyflow/react';
 import { NodeDetails } from './NodeModal';
 
@@ -11,12 +11,21 @@ interface OperatorModeProps {
   nodeDetailsMap: Record<string, NodeDetails>;
 }
 
+type ChecklistCriticality = 'critical' | 'required' | 'info';
+
+interface ChecklistItem {
+  text: string;
+  criticality: ChecklistCriticality;
+}
+
 interface OperatorStep {
   id: string;
   title: string;
   description: string;
-  checklist: string[];
+  checklist: ChecklistItem[];
+  rawChecklist: string[];
   image: string;
+  images: string[];
   severity?: 'ok' | 'warning' | 'alert';
 }
 
@@ -44,24 +53,34 @@ const hashCode = (input: string) => {
   return Math.abs(hash);
 };
 
-const buildChecklist = (details?: NodeDetails, fallbackLabel?: string) => {
-  if (details?.tasks?.length) {
-    return details.tasks.slice(0, 5).map(task => task.text.trim()).filter(Boolean);
-  }
+const CRITICAL_KEYWORDS = ['conferir', 'verificar', 'checar', 'garantir', 'confirmar código', 'não ligar', 'perigo', 'crítico', 'obrigatório', 'nunca', 'sempre', 'segurança', 'emergência'];
+const INFO_KEYWORDS = ['anotar', 'registrar', 'informar', 'observar', 'horário', 'comunicar', 'informativo'];
 
-  if (details?.description) {
-    return details.description
+const classifyItem = (text: string): ChecklistCriticality => {
+  const lower = text.toLowerCase();
+  if (CRITICAL_KEYWORDS.some(k => lower.includes(k))) return 'critical';
+  if (INFO_KEYWORDS.some(k => lower.includes(k))) return 'info';
+  return 'required';
+};
+
+const buildChecklist = (details?: NodeDetails, fallbackLabel?: string): ChecklistItem[] => {
+  let texts: string[] = [];
+  if (details?.tasks?.length) {
+    texts = details.tasks.slice(0, 6).map(task => task.text.trim()).filter(Boolean);
+  } else if (details?.description) {
+    texts = details.description
       .split(/\.|\n|;/)
       .map(item => item.trim())
       .filter(item => item.length > 6)
-      .slice(0, 4);
+      .slice(0, 5);
+  } else {
+    texts = [
+      `Confirmar condição de ${fallbackLabel || 'item'}`,
+      'Validar integridade visual',
+      'Registrar desvios imediatamente',
+    ];
   }
-
-  return [
-    `Confirmar condição de ${fallbackLabel || 'item'}`,
-    'Validar integridade visual',
-    'Registrar desvios imediatamente',
-  ];
+  return texts.map(text => ({ text, criticality: classifyItem(text) }));
 };
 
 const pickImage = (details?: NodeDetails, seed = '0') => {
@@ -71,6 +90,17 @@ const pickImage = (details?: NodeDetails, seed = '0') => {
   return `${FALLBACK_IMAGES[hashCode(seed) % FALLBACK_IMAGES.length]}&sat=${(hashCode(seed) % 40) + 60}`;
 };
 
+const pickImages = (details?: NodeDetails, seed = '0'): string[] => {
+  if (details?.images?.length) return details.images.slice(0, 6);
+  return [`${FALLBACK_IMAGES[hashCode(seed) % FALLBACK_IMAGES.length]}&sat=${(hashCode(seed) % 40) + 60}`];
+};
+
+const CRITICALITY_CONFIG: Record<ChecklistCriticality, { icon: string; label: string; bar: string; bg: string; border: string; text: string; glow: string }> = {
+  critical: { icon: '🔴', label: 'CRÍTICO',     bar: 'bg-red-500',    bg: 'bg-red-500/10',    border: 'border-red-500/40',    text: 'text-red-300',    glow: '0 0 18px rgba(239,68,68,0.35)' },
+  required: { icon: '🟡', label: 'OBRIGATÓRIO', bar: 'bg-amber-400',  bg: 'bg-amber-400/8',   border: 'border-amber-400/30',  text: 'text-amber-300',  glow: '0 0 18px rgba(251,191,36,0.3)' },
+  info:     { icon: '🔵', label: 'INFORMATIVO',  bar: 'bg-blue-400',   bg: 'bg-blue-400/8',    border: 'border-blue-400/30',   text: 'text-blue-300',   glow: '0 0 18px rgba(96,165,250,0.25)' },
+};
+
 export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: OperatorModeProps) {
   const [view, setView] = useState<'home' | 'wizard' | 'complete'>('home');
   const [phaseIndex, setPhaseIndex] = useState(0);
@@ -78,6 +108,14 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
   const [checkState, setCheckState] = useState<Record<string, boolean>>({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // Right panel states
+  const [refMode, setRefMode] = useState<'image' | 'compare'>('image');
+  const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const imgRef = useRef<HTMLDivElement>(null);
 
   const phases = useMemo<OperatorPhase[]>(() => {
     if (!nodes.length) return [];
@@ -100,12 +138,15 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
     const createStep = (node: Node): OperatorStep => {
       const data = (node.data || {}) as any;
       const details = nodeDetailsMap[node.id];
+      const checklist = buildChecklist(details, data.label);
       return {
         id: node.id,
         title: data.label || 'Etapa',
         description: details?.description || data.description || 'Siga as instruções apresentadas nesta etapa.',
-        checklist: buildChecklist(details, data.label),
+        checklist,
+        rawChecklist: checklist.map(c => c.text),
         image: pickImage(details, node.id),
+        images: pickImages(details, node.id),
         severity: data.nodeType === 'decision' ? 'warning' : data.nodeType === 'alert' ? 'alert' : 'ok',
       };
     };
@@ -145,6 +186,9 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
 
   useEffect(() => {
     setCheckState({});
+    setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
+    setActiveImageIdx(0);
   }, [phaseIndex, stepIndex]);
 
   const handleStart = (index = 0) => {
@@ -153,11 +197,42 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
     setView('wizard');
   };
 
-  const handleChecklistToggle = (item: string) => {
-    setCheckState(prev => ({ ...prev, [item]: !prev[item] }));
+  const handleChecklistToggle = (itemText: string) => {
+    setCheckState(prev => {
+      const next = { ...prev, [itemText]: !prev[itemText] };
+      return next;
+    });
   };
 
-  const canAdvance = currentStep ? currentStep.checklist.every(item => checkState[item]) : false;
+  const handleZoom = useCallback((delta: number) => {
+    setZoom(z => Math.min(4, Math.max(1, z + delta)));
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (zoom <= 1) return;
+    setIsPanning(true);
+    panStart.current = { x: e.clientX, y: e.clientY, ox: panOffset.x, oy: panOffset.y };
+  }, [zoom, panOffset]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanning || !panStart.current) return;
+    setPanOffset({
+      x: panStart.current.ox + (e.clientX - panStart.current.x),
+      y: panStart.current.oy + (e.clientY - panStart.current.y),
+    });
+  }, [isPanning]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false);
+    panStart.current = null;
+  }, []);
+
+  const canAdvance = currentStep ? currentStep.checklist.every(item => checkState[item.text]) : false;
 
   const handleNext = useCallback(() => {
     if (!currentPhase || !currentStep) return;
@@ -229,7 +304,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
       step.title.toLowerCase().includes(q) ||
       step.description.toLowerCase().includes(q) ||
       phaseTitle.toLowerCase().includes(q) ||
-      step.checklist.some(c => c.toLowerCase().includes(q))
+      step.checklist.some(c => c.text.toLowerCase().includes(q))
     );
   }, [searchQuery, allSteps]);
 
@@ -395,7 +470,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
             </div>
 
             {/* ── MAIN SLIDE CONTENT ── */}
-            <div className="flex-1 grid lg:grid-cols-2 min-h-0">
+            <div className="flex-1 grid lg:grid-cols-2 min-h-0 overflow-y-auto lg:overflow-hidden">
 
               {/* LEFT PANEL: info + checklist */}
               <div className="flex flex-col gap-0 border-r border-white/5 min-h-0">
@@ -430,110 +505,394 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
 
                 {/* checklist — scrollable only if too many items */}
                 <div className="flex-1 overflow-y-auto px-5 py-3">
-                  <p className="text-[8px] text-slate-500 uppercase tracking-widest font-bold mb-2">
-                    ☑ Confirme cada item:
-                  </p>
-                  <div className="space-y-1.5">
-                    {currentStep.checklist.map((item, i) => (
-                      <button
-                        key={i}
-                        onClick={() => handleChecklistToggle(item)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all active:scale-[0.98] ${
-                          checkState[item]
-                            ? 'border-emerald-400/50 bg-emerald-400/10 text-white'
-                            : 'border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.07]'
-                        }`}
-                      >
-                        <CheckCircle2
-                          className={`shrink-0 transition-all duration-200 ${checkState[item] ? 'text-emerald-400 scale-105' : 'text-slate-700'}`}
-                          size={18}
-                        />
-                        <span 
-                          className="font-medium leading-snug"
-                          style={{
-                            fontSize: item.length > 100 ? 'clamp(0.7rem, 1.2vw, 0.8rem)' :
-                                      item.length > 60 ? 'clamp(0.8rem, 1.5vw, 0.9rem)' :
-                                      'clamp(0.9rem, 2vw, 1rem)',
-                            wordBreak: 'break-word'
-                          }}
-                        >{item}</span>
-                      </button>
-                    ))}
+                  {/* criticality legend */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <p className="text-[8px] text-slate-500 uppercase tracking-widest font-bold">☑ Confirme cada item:</p>
+                    <div className="flex items-center gap-2 ml-auto">
+                      {(['critical','required','info'] as ChecklistCriticality[]).map(c => (
+                        <span key={c} className={`text-[9px] font-bold flex items-center gap-0.5 ${CRITICALITY_CONFIG[c].text}`}>
+                          {CRITICALITY_CONFIG[c].icon} {CRITICALITY_CONFIG[c].label}
+                        </span>
+                      ))}
+                    </div>
                   </div>
+                  <div className="space-y-2">
+                    {currentStep.checklist.map((item, i) => {
+                      const checked = checkState[item.text];
+                      const cfg = CRITICALITY_CONFIG[item.criticality];
+                      return (
+                        <motion.button
+                          key={i}
+                          layout
+                          onClick={() => handleChecklistToggle(item.text)}
+                          whileTap={{ scale: 0.97 }}
+                          className={`w-full flex items-center gap-0 rounded-xl border text-left overflow-hidden transition-all ${
+                            checked ? 'border-emerald-400/50' : cfg.border
+                          }`}
+                          style={{
+                            background: checked ? 'rgba(16,185,129,0.12)' : undefined,
+                            boxShadow: checked ? '0 0 16px rgba(16,185,129,0.25)' : undefined,
+                          }}
+                        >
+                          {/* criticality bar */}
+                          <div className={`shrink-0 w-1 self-stretch ${checked ? 'bg-emerald-400' : cfg.bar}`} />
+                          <div className={`flex-1 flex items-center gap-2.5 px-3 py-2.5 ${
+                            checked ? '' : cfg.bg
+                          }`}>
+                            {/* icon */}
+                            <motion.div
+                              animate={checked ? { scale: [1, 1.3, 1], rotate: [0, 10, 0] } : { scale: 1 }}
+                              transition={{ duration: 0.35, ease: 'easeOut' }}
+                            >
+                              <CheckCircle2
+                                className={`shrink-0 transition-colors duration-200 ${
+                                  checked ? 'text-emerald-400' : 'text-slate-600'
+                                }`}
+                                size={18}
+                              />
+                            </motion.div>
+                            {/* text */}
+                            <div className="flex-1">
+                              <span className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider mb-0.5 ${
+                                checked ? 'text-emerald-400' : cfg.text
+                              }`}>
+                                {cfg.icon} {cfg.label}
+                              </span>
+                              <span
+                                className={`font-medium leading-snug block transition-colors ${
+                                  checked ? 'text-emerald-100 line-through decoration-emerald-400/50' : 'text-slate-200'
+                                }`}
+                                style={{
+                                  fontSize: item.text.length > 100 ? 'clamp(0.7rem, 1.2vw, 0.8rem)' :
+                                            item.text.length > 60  ? 'clamp(0.8rem, 1.5vw, 0.9rem)' :
+                                            'clamp(0.85rem, 1.8vw, 0.95rem)',
+                                  wordBreak: 'break-word',
+                                }}
+                              >{item.text}</span>
+                            </div>
+                            {/* checked badge */}
+                            <AnimatePresence>
+                              {checked && (
+                                <motion.span
+                                  initial={{ opacity: 0, scale: 0.5 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.5 }}
+                                  className="shrink-0 text-[9px] font-black text-emerald-400 bg-emerald-400/15 border border-emerald-400/30 px-2 py-0.5 rounded-full"
+                                >✓ OK</motion.span>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+
+                  {/* step completion banner */}
+                  <AnimatePresence>
+                    {canAdvance && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 25, delay: 0.1 }}
+                        className="mt-3 relative overflow-hidden flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-400/40 bg-emerald-400/10"
+                      >
+                        {/* glow sweep */}
+                        <motion.div
+                          className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-400/20 to-transparent"
+                          animate={{ x: ['-100%', '200%'] }}
+                          transition={{ duration: 1.5, ease: 'easeInOut' }}
+                        />
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ repeat: 2, duration: 0.4 }}
+                        >
+                          <CheckCircle2 size={22} className="text-emerald-400 shrink-0" />
+                        </motion.div>
+                        <div>
+                          <p className="text-xs font-black text-emerald-300">✅ Etapa concluída com sucesso</p>
+                          <p className="text-[10px] text-emerald-400/70">Todos os itens foram confirmados. Avance para continuar.</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* action bar — always at bottom */}
-                <div className="shrink-0 px-5 py-2.5 border-t border-white/5 bg-[#060d1a]/80">
-                  {!canAdvance && (
-                    <p className="text-[10px] text-amber-400 text-center mb-2 font-semibold">
-                      ⚠️ Marque todos os itens
-                    </p>
-                  )}
-                  <div className="flex gap-2">
+                <div className="shrink-0 px-5 py-3 border-t border-white/5 bg-[#060d1a]/90">
+                  <div className="flex gap-2 items-stretch">
                     <button
                       onClick={handleBack}
-                      className="flex items-center gap-1 px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors"
+                      className="flex items-center gap-1 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors"
                     >
                       <ChevronLeft size={16} /> Voltar
                     </button>
-                    <button
-                      onClick={handleNext}
-                      disabled={!canAdvance}
-                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all active:scale-[0.98] ${
-                        canAdvance
-                          ? 'bg-emerald-400 text-slate-900 hover:bg-emerald-300 shadow-[0_8px_25px_rgba(16,185,129,0.3)]'
-                          : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                      }`}
-                    >
-                      {canAdvance ? (
-                        <>✓ Confirmar <ChevronRight size={16} /></>
-                      ) : (
-                        <>Marque os itens</>
-                      )}
-                    </button>
+
+                    {/* Smart advance button */}
+                    <div className="flex-1 relative">
+                      <AnimatePresence mode="wait">
+                        {!canAdvance ? (
+                          /* LOCKED STATE */
+                          <motion.button
+                            key="locked"
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.2 }}
+                            disabled
+                            className="w-full h-full flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/5 cursor-not-allowed"
+                          >
+                            <span className="text-[10px] font-semibold text-amber-400 flex items-center gap-1">
+                              ⚠ Complete os itens obrigatórios
+                            </span>
+                            <span className="text-slate-600 font-bold text-sm">
+                              Marque os itens para continuar
+                            </span>
+                          </motion.button>
+                        ) : (
+                          /* UNLOCKED STATE — animated, pulsing, inviting */
+                          <motion.button
+                            key="unlocked"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={{ duration: 0.25, type: 'spring', stiffness: 300, damping: 20 }}
+                            onClick={handleNext}
+                            className="w-full h-full relative overflow-hidden flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm text-slate-900 active:scale-[0.97] transition-transform"
+                            style={{
+                              background: 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%)',
+                              boxShadow: '0 0 20px rgba(16,185,129,0.5), 0 4px 15px rgba(16,185,129,0.3)',
+                            }}
+                          >
+                            {/* shimmer sweep */}
+                            <motion.span
+                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12"
+                              animate={{ x: ['-120%', '220%'] }}
+                              transition={{ repeat: Infinity, duration: 2, ease: 'linear', repeatDelay: 1 }}
+                            />
+                            <motion.span
+                              animate={{ scale: [1, 1.15, 1] }}
+                              transition={{ repeat: Infinity, duration: 1.4, ease: 'easeInOut' }}
+                            >
+                              <ArrowRight size={17} strokeWidth={3} />
+                            </motion.span>
+                            <span className="relative z-10">
+                              {phaseIndex < phases.length - 1 && stepIndex === currentPhase.steps.length - 1
+                                ? '▶ Próxima Fase'
+                                : stepIndex < currentPhase.steps.length - 1
+                                ? '▶ Próxima Etapa'
+                                : '✓ Concluir Processo'}
+                            </span>
+                          </motion.button>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* RIGHT PANEL: image reference */}
-              <div className="relative flex flex-col min-h-0">
-                {/* background image fills the panel */}
-                <img
-                  src={currentStep.image}
-                  alt={currentStep.title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#060d1a] via-[#060d1a]/40 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-r from-[#060d1a]/30 to-transparent" />
+              {/* RIGHT PANEL: visual reference (MES-style) */}
+              <div className="relative flex flex-col min-h-[280px] lg:min-h-0 bg-[#040910]">
 
-                {/* status badges top-right */}
-                <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
-                  <span className="flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-full backdrop-blur-sm">🟩 OK</span>
-                  <span className="flex items-center gap-1 text-[10px] font-bold bg-red-500/20 border border-red-500/40 text-red-300 px-2 py-1 rounded-full backdrop-blur-sm">🟥 NOK</span>
-                  <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-full backdrop-blur-sm">🟨 Atenção</span>
+                {/* ── Top toolbar ── */}
+                <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-white/5 bg-[#060d1a]/80 z-20">
+                  <span className="text-[9px] uppercase tracking-widest text-amber-300 font-black mr-1">Referência Visual</span>
+                  {/* mode toggles */}
+                  <button
+                    onClick={() => setRefMode('image')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      refMode === 'image' ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  ><ImageIcon size={11} /> Imagem</button>
+                  <button
+                    onClick={() => setRefMode('compare')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      refMode === 'compare' ? 'bg-purple-500/20 border border-purple-500/40 text-purple-300' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  ><Layers size={11} /> Comparar</button>
+                  <div className="flex-1" />
+                  {/* zoom controls */}
+                  <button onClick={() => handleZoom(0.5)} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><ZoomIn size={13} /></button>
+                  <button onClick={() => handleZoom(-0.5)} disabled={zoom <= 1} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"><ZoomOut size={13} /></button>
+                  <button onClick={handleResetZoom} disabled={zoom <= 1} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"><RotateCcw size={13} /></button>
+                  <span className="text-[10px] text-slate-500 tabular-nums w-8 text-right">{Math.round(zoom * 100)}%</span>
                 </div>
 
-                {/* bottom info */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
-                  <p className="text-[8px] tracking-[0.3em] uppercase text-amber-300 font-bold mb-0.5">Referência</p>
-                  <p className="text-sm font-bold text-white leading-tight">{currentStep.title}</p>
-                  <p className="text-xs text-slate-300 mt-0.5">Confira o padrão esperado.</p>
+                {/* ── Image/Video viewer ── */}
+                {refMode === 'image' && (
+                  <div
+                    ref={imgRef}
+                    className="flex-1 relative overflow-hidden"
+                    style={{ cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                  >
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={`img-${phaseIndex}-${stepIndex}-${activeImageIdx}`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="absolute inset-0"
+                        style={{
+                          transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
+                          transformOrigin: 'center center',
+                          transition: isPanning ? 'none' : 'transform 0.2s ease',
+                        }}
+                      >
+                        {(() => {
+                          const src = currentStep.images[activeImageIdx] || currentStep.image;
+                          const isVideo = src.match(/\.(mp4|webm|ogg)$/i);
+                          if (isVideo) return (
+                            <video
+                              src={src}
+                              autoPlay loop muted playsInline
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                          );
+                          return (
+                            <img
+                              src={src}
+                              alt={currentStep.title}
+                              className="absolute inset-0 w-full h-full object-cover"
+                              onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+                            />
+                          );
+                        })()}
+                      </motion.div>
+                    </AnimatePresence>
+                    {/* dark overlays */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#040910] via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#060d1a]/20 to-transparent pointer-events-none" />
 
-                  {/* step dots */}
-                  <div className="flex gap-1.5 mt-2 flex-wrap">
-                    {currentPhase.steps.map((_, i) => (
-                      <div
-                        key={i}
-                        className={`rounded-full transition-all duration-300 ${
-                          i < stepIndex ? 'w-4 h-1.5 bg-emerald-400' :
-                          i === stepIndex ? 'w-6 h-1.5 bg-blue-400' :
-                          'w-4 h-1.5 bg-white/20'
-                        }`}
-                      />
-                    ))}
+                    {/* video/gif badge */}
+                    {(currentStep.images[activeImageIdx] || '').match(/\.(mp4|webm|ogg|gif)$/i) && (
+                      <div className="absolute top-10 left-2 z-10">
+                        <span className="flex items-center gap-1 text-[10px] font-bold bg-purple-500/20 border border-purple-500/40 text-purple-300 px-2 py-1 rounded-full backdrop-blur-sm">
+                          <Video size={10} /> {(currentStep.images[activeImageIdx] || '').match(/\.gif$/i) ? 'GIF' : 'Vídeo'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* status badges — top-right inside viewer */}
+                    <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-full backdrop-blur-sm">🟩 OK</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-red-500/20 border border-red-500/40 text-red-300 px-2 py-1 rounded-full backdrop-blur-sm">🟥 NOK</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-full backdrop-blur-sm">🟨 Atenção</span>
+                    </div>
+
+                    {/* image thumbnails strip (if multiple) */}
+                    {currentStep.images.length > 1 && (
+                      <div className="absolute bottom-16 left-0 right-0 flex justify-center gap-1.5 px-3 z-10">
+                        {currentStep.images.map((img, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setActiveImageIdx(idx)}
+                            className={`w-10 h-10 rounded-lg overflow-hidden border-2 transition-all ${
+                              idx === activeImageIdx ? 'border-blue-400 scale-105' : 'border-white/10 opacity-50 hover:opacity-80'
+                            }`}
+                          >
+                            <img src={img} alt="" className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
+
+                {/* ── Compare mode ── */}
+                {refMode === 'compare' && (
+                  <div className="flex-1 flex min-h-0 relative">
+                    {/* LEFT: padrão esperado */}
+                    <div className="flex-1 relative overflow-hidden">
+                      <img
+                        src={currentStep.images[0] || currentStep.image}
+                        alt="Referência"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#040910]/90 via-transparent to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#040910]/30" />
+                      {/* header label */}
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2 py-1 rounded-lg backdrop-blur-sm">✅ Padrão</span>
+                      </div>
+                      {/* bottom info */}
+                      <div className="absolute bottom-3 left-3 right-3">
+                        <p className="text-[10px] font-bold text-emerald-300 mb-0.5">Padrão Esperado</p>
+                        <p className="text-xs text-slate-300 leading-snug">{currentStep.title}</p>
+                      </div>
+                    </div>
+
+                    {/* DIVIDER */}
+                    <div className="shrink-0 w-px bg-white/10 relative z-10">
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#0d1929] border-2 border-white/20 flex items-center justify-center shadow-lg">
+                        <span className="text-[9px] font-black text-slate-300">VS</span>
+                      </div>
+                    </div>
+
+                    {/* RIGHT: comparação */}
+                    <div className="flex-1 relative overflow-hidden">
+                      {currentStep.images[1] ? (
+                        <>
+                          <img
+                            src={currentStep.images[1]}
+                            alt="Comparação"
+                            className="absolute inset-0 w-full h-full object-cover"
+                            onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#040910]/90 via-transparent to-transparent" />
+                          <div className="absolute top-2 left-2">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-blue-300 bg-blue-500/20 border border-blue-500/40 px-2 py-1 rounded-lg backdrop-blur-sm">🔍 Referência</span>
+                          </div>
+                          <div className="absolute bottom-3 left-3 right-3">
+                            <p className="text-[10px] font-bold text-blue-300 mb-0.5">Imagem de Referência</p>
+                            <p className="text-xs text-slate-300 leading-snug">Compare com o padrão.</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0a1020]">
+                          <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                            <Layers size={24} className="text-slate-500" />
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-slate-400">Segunda imagem</p>
+                            <p className="text-[11px] text-slate-600 mt-1">Adicione no editor do nó</p>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                            <span className="text-[10px] text-slate-500">💡 Arraste uma imagem para o NodeModal</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+
+                {/* ── Bottom info (only image mode) ── */}
+                {refMode === 'image' && (
+                  <div className="shrink-0 px-4 py-2 border-t border-white/5 bg-[#060d1a]/90 z-10">
+                    <p className="text-[8px] tracking-[0.3em] uppercase text-amber-300 font-bold mb-0.5">Referência</p>
+                    <p className="text-xs font-bold text-white leading-tight">{currentStep.title}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Confira o padrão esperado.</p>
+                    {/* step dots */}
+                    <div className="flex gap-1.5 mt-2 flex-wrap">
+                      {currentPhase.steps.map((_, i) => (
+                        <div
+                          key={i}
+                          className={`rounded-full transition-all duration-300 ${
+                            i < stepIndex ? 'w-4 h-1.5 bg-emerald-400' :
+                            i === stepIndex ? 'w-6 h-1.5 bg-blue-400' :
+                            'w-4 h-1.5 bg-white/20'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -649,7 +1008,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                         {step.checklist.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {step.checklist.slice(0, 3).map((c, i) => (
-                              <span key={i} className="text-[10px] bg-white/5 border border-white/10 text-slate-400 px-2 py-0.5 rounded-full">{c}</span>
+                              <span key={i} className="text-[10px] bg-white/5 border border-white/10 text-slate-400 px-2 py-0.5 rounded-full">{c.text}</span>
                             ))}
                             {step.checklist.length > 3 && (
                               <span className="text-[10px] text-slate-600">+{step.checklist.length - 3} itens</span>

@@ -518,11 +518,11 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-10 z-10 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 z-10 custom-scrollbar">
         <div className="max-w-7xl mx-auto">
           
           {/* Breadcrumb Navigation */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <button 
                 onClick={() => {
@@ -548,24 +548,24 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
               </AnimatePresence>
             </div>
             
-            <div className="flex items-center gap-2 p-1 bg-white/5 rounded-xl border border-white/10 w-max">
+            <div className="flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/10 overflow-x-auto max-w-full">
               <button 
                 onClick={() => setFolderTab('items')}
-                className={cn("px-4 py-2 rounded-lg text-sm font-semibold transition-all", folderTab === 'items' ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white")}
+                className={cn("shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap", folderTab === 'items' ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white")}
               >
                 {currentFolder ? 'Sub-itens' : 'Visão Geral'}
               </button>
               <button 
                 onClick={() => setFolderTab('docs')}
-                className={cn("px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2", folderTab === 'docs' ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white")}
+                className={cn("shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap", folderTab === 'docs' ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white")}
               >
-                <FileText size={16} /> Central de Documentos
+                <FileText size={14} /> <span className="hidden sm:inline">Central de </span>Documentos
               </button>
               <button 
                 onClick={() => setFolderTab('tasks')}
-                className={cn("px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2", folderTab === 'tasks' ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white")}
+                className={cn("shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap", folderTab === 'tasks' ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white")}
               >
-                <CheckSquare size={16} /> Tarefas
+                <CheckSquare size={14} /> Tarefas
               </button>
             </div>
           </div>
@@ -609,7 +609,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
               initial="hidden"
               animate="show"
               key={currentFolder ? currentFolder.id : 'root'}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
             >
               {filteredItems.map(item => (
                 <motion.div
