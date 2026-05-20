@@ -558,65 +558,69 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   return (
     <div className="h-full flex flex-col bg-[#080f1f]">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-6 py-3.5 border-b border-white/[0.06] bg-[#0b1326]">
-        <div className="flex items-center gap-3">
+      <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between p-4 gap-3 border-b border-white/[0.06] bg-[#0b1326]">
+        <div className="flex items-center justify-between md:justify-start gap-3 w-full md:w-auto">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
               <Kanban size={14} className="text-white" />
             </div>
             <h2 className="text-base font-bold text-white tracking-tight">Tarefas</h2>
           </div>
-          <div className="w-px h-5 bg-white/10" />
-          {/* View Toggle */}
-          <div className="flex items-center bg-white/5 border border-white/[0.06] rounded-lg p-0.5">
-            <button onClick={() => setViewMode('kanban')} className={cn('p-1.5 rounded-md transition-all', viewMode === 'kanban' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300')} title="Kanban"><Kanban size={14} /></button>
-            <button onClick={() => setViewMode('list')}   className={cn('p-1.5 rounded-md transition-all', viewMode === 'list'   ? 'bg-white/10 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300')} title="Lista"><List size={14} /></button>
+          <div className="flex items-center gap-2">
+            <div className="w-px h-5 bg-white/10 hidden md:block" />
+            {/* View Toggle */}
+            <div className="flex items-center bg-white/5 border border-white/[0.06] rounded-lg p-0.5">
+              <button onClick={() => setViewMode('kanban')} className={cn('p-1.5 rounded-md transition-all', viewMode === 'kanban' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300')} title="Kanban"><Kanban size={14} /></button>
+              <button onClick={() => setViewMode('list')}   className={cn('p-1.5 rounded-md transition-all', viewMode === 'list'   ? 'bg-white/10 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300')} title="Lista"><List size={14} /></button>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Filters and Search row */}
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Search */}
-          <div className="relative">
+          <div className="relative flex-1 min-w-[120px] md:flex-initial">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input type="text" placeholder="Buscar tarefas..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 bg-white/[0.04] border border-white/[0.06] hover:border-white/10 rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40 w-44 transition-colors" />
+            <input type="text" placeholder="Buscar..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full md:w-36 pl-8 pr-3 py-1.5 bg-white/[0.04] border border-white/[0.06] hover:border-white/10 rounded-xl text-xs sm:text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40 transition-all" />
           </div>
 
           {/* Department Filter */}
           <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}
-            className="px-3 py-1.5 bg-white/[0.04] border border-white/[0.06] hover:border-white/10 rounded-xl text-sm text-slate-300 focus:outline-none focus:border-blue-500/40 transition-colors cursor-pointer">
-            <option value="all" className="bg-[#0b1326]">Todos Departamentos</option>
+            className="flex-1 md:flex-initial px-2 sm:px-3 py-1.5 bg-white/[0.04] border border-white/[0.06] hover:border-white/10 rounded-xl text-xs sm:text-sm text-slate-300 focus:outline-none focus:border-blue-500/40 transition-all cursor-pointer">
+            <option value="all" className="bg-[#0b1326]">Todos Deptos</option>
             {departments.map((dept) => (<option key={dept.id} value={dept.id} className="bg-[#0b1326]">{dept.name}</option>))}
           </select>
 
           {/* Priority Filter */}
           <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}
-            className="px-3 py-1.5 bg-white/[0.04] border border-white/[0.06] hover:border-white/10 rounded-xl text-sm text-slate-300 focus:outline-none focus:border-blue-500/40 transition-colors cursor-pointer">
-            <option value="all" className="bg-[#0b1326]">Todas Prioridades</option>
+            className="flex-1 md:flex-initial px-2 sm:px-3 py-1.5 bg-white/[0.04] border border-white/[0.06] hover:border-white/10 rounded-xl text-xs sm:text-sm text-slate-300 focus:outline-none focus:border-blue-500/40 transition-all cursor-pointer">
+            <option value="all" className="bg-[#0b1326]">Prioridade</option>
             <option value="urgent" className="bg-[#0b1326]">Urgente</option>
             <option value="high" className="bg-[#0b1326]">Alta</option>
             <option value="medium" className="bg-[#0b1326]">Média</option>
             <option value="low" className="bg-[#0b1326]">Baixa</option>
           </select>
 
-          <div className="w-px h-5 bg-white/10" />
+          {/* Actions */}
+          <div className="flex items-center gap-1.5 ml-auto md:ml-0">
+            {canMinutes && (
+              <button onClick={() => setMinutesOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-400 rounded-xl text-xs font-semibold transition-all"
+                title="Ata de Reunião">
+                <FileText size={13} />
+                <span className="hidden sm:inline">Ata</span>
+              </button>
+            )}
 
-          {/* Minutes Button */}
-          {canMinutes && (
-            <button onClick={() => setMinutesOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-400 rounded-xl text-xs font-semibold transition-all"
-              title="Gerar Ata de Reunião">
-              <FileText size={13} />Ata
-            </button>
-          )}
-
-          {/* Create Button */}
-          {canCreate && (
-            <button onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-600/20">
-              <Plus size={14} />Nova Tarefa
-            </button>
-          )}
+            {canCreate && (
+              <button onClick={() => setIsCreateModalOpen(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20">
+                <Plus size={13} />
+                <span>Nova</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -637,7 +641,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
                   <div
                     key={status}
                     className={cn(
-                      'w-72 flex-shrink-0 flex flex-col rounded-2xl transition-all duration-200 border',
+                      'w-[82vw] xs:w-72 flex-shrink-0 flex flex-col rounded-2xl transition-all duration-200 border',
                       isDragTarget
                         ? 'bg-blue-500/5 border-blue-500/30 ring-1 ring-blue-500/20'
                         : 'bg-[#0d1628] border-white/[0.05]'
