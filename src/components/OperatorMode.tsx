@@ -286,8 +286,19 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
             {/* hero */}
             <div className="relative flex flex-col items-center justify-center flex-1 px-8 text-center">
               <p className="text-[10px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-2">Modo Operador · Execução Guiada</p>
-              <h1 className="text-2xl md:text-4xl font-black text-white leading-tight max-w-4xl">{mapTitle}</h1>
-              <p className="text-sm text-slate-400 mt-2 max-w-xl">
+              <h1 
+                className="font-black text-white leading-tight max-w-4xl"
+                style={{
+                  fontSize: mapTitle.length > 60 ? 'clamp(1.25rem, 3vw, 1.75rem)' :
+                            mapTitle.length > 35 ? 'clamp(1.5rem, 4vw, 2.25rem)' :
+                            'clamp(1.75rem, 5vw, 3rem)',
+                  wordBreak: 'break-word'
+                }}
+              >{mapTitle}</h1>
+              <p 
+                className="text-slate-400 mt-2 max-w-xl"
+                style={{ fontSize: 'clamp(0.875rem, 2vw, 1.125rem)' }}
+              >
                 Siga as instruções passo a passo. Cada tela mostra apenas o que você precisa fazer agora.
               </p>
 
@@ -393,9 +404,29 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                 {/* title zone */}
                 <div className="shrink-0 px-6 pt-5 pb-3 border-b border-white/5">
                   <p className="text-[9px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-1">Etapa</p>
-                  <h2 className="text-xl font-black text-white leading-tight">{currentStep.title}</h2>
+                  <h2 
+                    className="font-black text-white leading-tight"
+                    style={{ 
+                      fontSize: currentStep.title.length > 50 ? 'clamp(1rem, 2.5vw, 1.25rem)' : 
+                                currentStep.title.length > 30 ? 'clamp(1.25rem, 3vw, 1.75rem)' : 
+                                'clamp(1.5rem, 4vw, 2.5rem)',
+                      wordBreak: 'break-word',
+                      hyphens: 'auto'
+                    }}
+                  >{currentStep.title}</h2>
                   {currentStep.description && (
-                    <p className="text-xs text-slate-400 mt-2 leading-relaxed line-clamp-2">{currentStep.description}</p>
+                    <p 
+                      className="text-slate-400 mt-2 leading-relaxed"
+                      style={{
+                        fontSize: currentStep.description.length > 150 ? 'clamp(0.75rem, 1.5vw, 0.875rem)' :
+                                  currentStep.description.length > 80 ? 'clamp(0.875rem, 2vw, 1rem)' :
+                                  'clamp(1rem, 2.5vw, 1.125rem)',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >{currentStep.description}</p>
                   )}
                 </div>
 
@@ -419,7 +450,15 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                           className={`shrink-0 transition-all duration-200 ${checkState[item] ? 'text-emerald-400 scale-105' : 'text-slate-700'}`}
                           size={18}
                         />
-                        <span className="text-xs font-medium leading-snug">{item}</span>
+                        <span 
+                          className="font-medium leading-snug"
+                          style={{
+                            fontSize: item.length > 100 ? 'clamp(0.7rem, 1.2vw, 0.8rem)' :
+                                      item.length > 60 ? 'clamp(0.8rem, 1.5vw, 0.9rem)' :
+                                      'clamp(0.9rem, 2vw, 1rem)',
+                            wordBreak: 'break-word'
+                          }}
+                        >{item}</span>
                       </button>
                     ))}
                   </div>
