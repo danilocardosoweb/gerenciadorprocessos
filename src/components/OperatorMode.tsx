@@ -204,14 +204,12 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
     }
   }, []);
 
-  // Auto-enter fullscreen when wizard starts; exit when going home
+  // Exit fullscreen when going home (entering wizard must be done via user interaction)
   useEffect(() => {
-    if (view === 'wizard') {
-      enterFullscreen();
-    } else {
+    if (view !== 'wizard') {
       exitFullscreen();
     }
-  }, [view, enterFullscreen, exitFullscreen]);
+  }, [view, exitFullscreen]);
 
   // Build flat list of all steps for search
   const allSteps = useMemo(() => {
