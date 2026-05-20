@@ -270,54 +270,91 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
     URL.revokeObjectURL(url);
   };
 
-  // ── Download .eml (opens directly in Outlook / Thunderbird / Apple Mail) ─
+  // ── Build plain-text email body (same style as reference app) ────────────
+  const getPlainTextBody = (): string => {
+    const dateStr = new Date(meetingDate + 'T12:00:00').toLocaleDateString('pt-BR', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+    const sep  = '='.repeat(52);
+    const sep2 = '-'.repeat(52);
+    const groups = groupedTasks();
+    const name  = currentUser?.name || 'Sistema';
+
+    const lines: string[] = [];
+
+    lines.push(sep);
+    lines.push(meetingTitle.toUpperCase());
+    lines.push(`Data: ${dateStr}${meetingTime ? ' às ' + meetingTime : ''}`);
+    if (meetingLocation) lines.push(`Local: ${meetingLocation}`);
+    lines.push(`Responsável: ${name}`);
+    lines.push(sep);
+    lines.push('');
+
+    lines.push('Prezados,');
+    lines.push('');
+    lines.push(`Segue abaixo a ata de reunião com o status atualizado das tarefas.`);
+    lines.push('');
+
+    if (attendees) {
+      lines.push(`Participantes: ${attendees}`);
+      lines.push('');
+    }
+
+    if (includeMetrics) {
+      lines.push('RESUMO:');
+      lines.push(`  - Total de tarefas:  ${metrics.total}`);
+      lines.push(`  - Concluídas:        ${metrics.done} (${metrics.completion}%)`);
+      lines.push(`  - Em Progresso:      ${metrics.inProgress}`);
+      lines.push(`  - Urgentes:          ${metrics.urgent}`);
+      lines.push('');
+    }
+
+    let groupIdx = 1;
+    for (const [group, groupTasks] of Object.entries(groups)) {
+      lines.push(`${groupIdx}) ${group.toUpperCase()}`);
+      lines.push(sep2);
+      const colHeader = 'TAREFA | PRIORIDADE | RESPONSÁVEL | DEPARTAMENTO | PRAZO';
+      lines.push(colHeader);
+      lines.push(sep2);
+      groupTasks.forEach(t => {
+        const prio  = priorityLabel[t.priority] || t.priority;
+        const resp  = t.assigned_user?.name || '—';
+        const dept  = t.department_data?.name || '—';
+        const prazo = t.due_date ? new Date(t.due_date).toLocaleDateString('pt-BR') : '—';
+        const icon  = statusIcon[t.status] || '○';
+        lines.push(`${icon} ${t.title} | ${prio} | ${resp} | ${dept} | ${prazo}`);
+        if (includeDescription && t.description) {
+          lines.push(`   → ${t.description}`);
+        }
+      });
+      lines.push('');
+      groupIdx++;
+    }
+
+    if (observations) {
+      lines.push('OBSERVAÇÕES E PRÓXIMOS PASSOS:');
+      lines.push(sep2);
+      lines.push(observations);
+      lines.push('');
+    }
+
+    lines.push(sep);
+    lines.push(`Documento gerado pelo Tecno Mapper`);
+    lines.push(`em ${new Date().toLocaleString('pt-BR')} por ${name}`);
+    lines.push(sep);
+
+    return lines.join('\n');
+  };
+
+  // ── Open mailto: with formatted plain-text body ────────────────────────
   const handleDownloadEML = () => {
-    const html    = getEmailHTML();
-    const from    = currentUser?.email || 'sistema@tecnomapper.com';
-    const fromName = currentUser?.name  || 'Tecno Mapper';
-    const to      = toList.join(', ');
-    const cc      = ccInput.trim();
-    const subject = meetingTitle;
-    const dateStr = new Date().toUTCString();
-    const boundary = `----=_TecnoMapper_${Date.now()}`;
-
-    const eml = [
-      `MIME-Version: 1.0`,
-      `Date: ${dateStr}`,
-      `From: "${fromName}" <${from}>`,
-      to   ? `To: ${to}`      : '',
-      cc   ? `Cc: ${cc}`      : '',
-      `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
-      `Content-Type: multipart/alternative; boundary="${boundary}"`,
-      ``,
-      `--${boundary}`,
-      `Content-Type: text/plain; charset=UTF-8`,
-      `Content-Transfer-Encoding: quoted-printable`,
-      ``,
-      `Ol=C3=A1,`,
-      ``,
-      `Segue a ata de reuni=C3=A3o "${subject}" realizada em ${new Date(meetingDate + 'T12:00:00').toLocaleDateString('pt-BR')}.`,
-      ``,
-      `Atenciosamente,`,
-      `${fromName}`,
-      ``,
-      `--${boundary}`,
-      `Content-Type: text/html; charset=UTF-8`,
-      `Content-Transfer-Encoding: base64`,
-      ``,
-      // Split base64 into 76-char lines (RFC 2045)
-      btoa(unescape(encodeURIComponent(html))).match(/.{1,76}/g)?.join('\r\n') || '',
-      ``,
-      `--${boundary}--`,
-    ].filter(l => l !== null && l !== undefined && !(l === '' && false)).join('\r\n');
-
-    const blob = new Blob([eml], { type: 'message/rfc822' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `ata-reuniao-${meetingDate}.eml`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const body  = getPlainTextBody();
+    const to    = toList.join(',');
+    const cc    = ccInput.trim();
+    const subj  = encodeURIComponent(meetingTitle);
+    const bodyE = encodeURIComponent(body);
+    const ccPart = cc ? `cc=${encodeURIComponent(cc)}&` : '';
+    window.open(`mailto:${to}?${ccPart}subject=${subj}&body=${bodyE}`);
     setCopiedEmail(true);
     setTimeout(() => setCopiedEmail(false), 3000);
   };
@@ -587,8 +624,8 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                 <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
                   <Mail size={18} className="text-blue-400 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-blue-300">E-mail 100% formatado (.eml)</p>
-                    <p className="text-xs text-slate-400 mt-1">Gera um arquivo <strong className="text-slate-300">.eml</strong> com o corpo HTML completo e formatado, destinatários, Cc, assunto e remetente já preenchidos. Ao abrir, o Outlook, Thunderbird ou Apple Mail mostra o e-mail pronto — basta clicar em Enviar.</p>
+                    <p className="text-sm font-semibold text-blue-300">E-mail formatado pronto para enviar</p>
+                    <p className="text-xs text-slate-400 mt-1">Abre seu cliente de e-mail (Outlook, Gmail, Thunderbird) com destinatários, Cc, assunto e corpo já preenchidos em formato profissional — igual ao seu outro app. Basta clicar em <strong className="text-slate-300">Enviar</strong>.</p>
                   </div>
                 </div>
 
@@ -641,14 +678,14 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                   <div className="px-4 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-slate-300">{meetingTitle}</div>
                 </div>
 
-                {/* Email body preview card */}
+                {/* Plain-text preview */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <Eye size={11} />Preview do Corpo do E-mail
                   </label>
-                  <div className="rounded-xl border border-white/[0.06] bg-white overflow-hidden" style={{ maxHeight: 280, overflowY: 'auto' }}>
-                    <div dangerouslySetInnerHTML={{ __html: getEmailHTML() }} />
-                  </div>
+                  <pre className="rounded-xl border border-white/[0.06] bg-[#0a1120] text-slate-300 text-[11px] leading-relaxed p-4 overflow-auto whitespace-pre-wrap font-mono" style={{ maxHeight: 280 }}>
+                    {getPlainTextBody()}
+                  </pre>
                 </div>
 
                 {/* Calendar invite */}
@@ -720,8 +757,8 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                       : 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/10'
                   )}>
                   {copiedEmail
-                    ? <><Check size={14} /> E-mail gerado! Abra o arquivo .eml</>
-                    : <><Mail size={14} /> Gerar E-mail (.eml)</>}
+                    ? <><Check size={14} /> Abrindo cliente de e-mail...</>
+                    : <><Mail size={14} /> Abrir no Cliente de E-mail</>}
                 </button>
               </>
             )}
