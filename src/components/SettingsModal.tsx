@@ -1150,21 +1150,27 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                         onClick={async () => {
                           if (!newDepartment.name?.trim()) return;
                           
+                          let result;
                           if (activeView === 'edit_department' && editingDepartment) {
-                            await updateDepartment(editingDepartment.id, newDepartment);
+                            result = await updateDepartment(editingDepartment.id, newDepartment);
                           } else {
-                            await addDepartment({
+                            result = await addDepartment({
                               name: newDepartment.name || '',
                               description: newDepartment.description || '',
                               color: newDepartment.color || '#3b82f6',
-                              icon: newDepartment.icon || 'building',
+                              icon: newDepartment.icon || 'Building2',
                               isDefault: newDepartment.isDefault || false
                             });
                           }
                           
+                          if (!result?.success) {
+                            alert('Erro ao salvar departamento: ' + (result?.error || 'Erro desconhecido'));
+                            return;
+                          }
+                          
                           setActiveView('list');
                           setEditingDepartment(null);
-                          setNewDepartment({ name: '', description: '', color: '#3b82f6', icon: 'building', isDefault: false });
+                          setNewDepartment({ name: '', description: '', color: '#3b82f6', icon: 'Building2', isDefault: false });
                         }}
                         disabled={!newDepartment.name?.trim()}
                         className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"

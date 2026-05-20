@@ -88,7 +88,8 @@ export function useUsers() {
 
   const addDepartment = useCallback(async (dept: Omit<Department, 'id'>) => {
     try {
-      const { data, error } = await supabase.from('departments').insert(dept).select().single();
+      const { isDefault, ...dbDept } = dept as any;
+      const { data, error } = await supabase.from('departments').insert(dbDept).select().single();
       if (error) throw error;
       setDepartments(prev => [...prev, data]);
       return { success: true };
@@ -99,7 +100,8 @@ export function useUsers() {
 
   const updateDepartment = useCallback(async (id: string, dept: Partial<Department>) => {
     try {
-      const { error } = await supabase.from('departments').update(dept).eq('id', id);
+      const { isDefault, ...dbDept } = dept as any;
+      const { error } = await supabase.from('departments').update(dbDept).eq('id', id);
       if (error) throw error;
       setDepartments(prev => prev.map(d => d.id === id ? { ...d, ...dept } : d));
       return { success: true };
