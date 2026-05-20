@@ -37,6 +37,7 @@ import { useConfirm } from './hooks/useConfirm';
 import { useKeyboardShortcuts, useAppShortcuts } from './hooks/useKeyboardShortcuts';
 import { WorkInstructionExport } from './components/WorkInstructionExport';
 import { OperatorMode } from './components/OperatorMode';
+import { usePermissions } from './lib/permissions';
 
 const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   initialNodes,
@@ -69,13 +70,13 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
   // Confirm modal state
   const { confirm, confirmState, closeConfirm, handleConfirm } = useConfirm();
   
-  // Check if user is admin
-  const isAdmin = currentUser?.role === 'Administrador';
+  // Centralized permissions
+  const perms = usePermissions(currentUser as any);
   
   // Delete node function - only for admins
   const handleDeleteNode = useCallback((nodeId: string) => {
-    if (!isAdmin) {
-      alert('❌ Apenas administradores podem excluir nós.');
+    if (!perms.can.deleteNode) {
+      alert('❌ Você não tem permissão para excluir nós. Apenas Administradores podem realizar esta ação.');
       return;
     }
     
@@ -86,7 +87,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
     
     success('Nó excluído', 'O nó foi removido com sucesso');
-  }, [isAdmin, setNodes, setEdges, success]);
+  }, [perms.can.deleteNode, setNodes, setEdges, success]);
   
   // Delete node with confirmation
   const handleDeleteNodeWithConfirm = useCallback(async (nodeId: string) => {
@@ -109,12 +110,12 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
       ...node,
       data: {
         ...node.data,
-        isAdmin,
+        isAdmin: perms.isAdmin,
         isPresenting,
         onDeleteConfirm: handleDeleteNodeWithConfirm,
       },
     }));
-  }, [nodes, isAdmin, isPresenting, handleDeleteNodeWithConfirm]);
+  }, [nodes, perms.isAdmin, isPresenting, handleDeleteNodeWithConfirm]);
 
   // Keyboard shortcuts
   useAppShortcuts({
@@ -1042,7 +1043,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
 export default function App() {
   // All state hooks must be at the top before any conditionals
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string; department?: string } | null>(null);
   const [currentMap, setCurrentMap] = useState<{ id: string; title: string } | null>(null);
   const [currentMarkdown, setCurrentMarkdown] = useState<{ id: string; title: string; content: string } | null>(null);
   const [currentSector3D, setCurrentSector3D] = useState<{ id: string; title: string } | null>(null);
@@ -1058,9 +1059,9 @@ export default function App() {
 
   // Mock users database (in real app this would come from backend)
   const mockUsers = [
-    { id: '1', email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', name: 'Danilo Cardoso', role: 'Administrador' },
-    { id: '2', email: 'joao.silva@exemplo.com', password: '123456', name: 'João Silva', role: 'Editor' },
-    { id: '3', email: 'maria.souza@exemplo.com', password: '123456', name: 'Maria Souza', role: 'Editor' },
+    { id: '00000000-0000-0000-0000-000000000001', email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', name: 'Danilo Cardoso', role: 'Administrador' },
+    { id: '00000000-0000-0000-0000-000000000002', email: 'joao.silva@exemplo.com', password: '123456', name: 'João Silva', role: 'Editor' },
+    { id: '00000000-0000-0000-0000-000000000003', email: 'maria.souza@exemplo.com', password: '123456', name: 'Maria Souza', role: 'Editor' },
   ];
 
   // Session timeout check
@@ -1108,11 +1109,14 @@ export default function App() {
     };
   }, [isAuthenticated]);
 
-  const handleLogin = (email: string, password: string): boolean => {
+  const handleLogin = async (email: string, password: string): Promise<boolean> => {
     const user = mockUsers.find(u => u.email === email && u.password === password);
     if (user) {
+      // Fetch department from Supabase
+      const { supabase } = await import('./lib/supabase');
+      const { data: dbUser } = await supabase.from('users').select('department').eq('id', user.id).single();
       setIsAuthenticated(true);
-      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role });
+      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role, department: dbUser?.department ?? undefined });
       addLog({
         userName: user.name,
         userEmail: user.email,

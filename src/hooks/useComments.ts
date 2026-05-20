@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 
 export interface Comment {
   id: string;
@@ -10,65 +11,53 @@ export interface Comment {
   resolved: boolean;
 }
 
-const STORAGE_KEY = 'tecno_mapper_comments';
+function toComment(r: any): Comment {
+  return {
+    id: r.id,
+    nodeId: r.node_id,
+    userName: r.user_name,
+    userEmail: r.user_email || '',
+    text: r.text,
+    timestamp: r.created_at,
+    resolved: r.resolved,
+  };
+}
 
 export function useComments(nodeId?: string) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load all comments from localStorage
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setComments(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Error loading comments:', error);
-    }
-    setIsLoaded(true);
+    supabase
+      .from('node_comments')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (data) setComments(data.map(toComment));
+        setIsLoaded(true);
+      });
   }, []);
 
-  // Save to localStorage
-  useEffect(() => {
-    if (isLoaded) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(comments));
-      } catch (error) {
-        console.error('Error saving comments:', error);
-      }
-    }
-  }, [comments, isLoaded]);
-
-  const addComment = useCallback((
+  const addComment = useCallback(async (
     userName: string,
     userEmail: string,
     text: string
   ) => {
     if (!nodeId || !text.trim()) return;
-
-    const newComment: Comment = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      nodeId,
-      userName,
-      userEmail,
-      text: text.trim(),
-      timestamp: new Date().toISOString(),
-      resolved: false,
-    };
-
-    setComments(prev => [...prev, newComment]);
+    const { data } = await supabase
+      .from('node_comments')
+      .insert({ node_id: nodeId, user_name: userName, user_email: userEmail, text: text.trim() })
+      .select().single();
+    if (data) setComments(prev => [...prev, toComment(data)]);
   }, [nodeId]);
 
-  const resolveComment = useCallback((commentId: string) => {
-    setComments(prev =>
-      prev.map(c =>
-        c.id === commentId ? { ...c, resolved: true } : c
-      )
-    );
+  const resolveComment = useCallback(async (commentId: string) => {
+    await supabase.from('node_comments').update({ resolved: true }).eq('id', commentId);
+    setComments(prev => prev.map(c => c.id === commentId ? { ...c, resolved: true } : c));
   }, []);
 
-  const deleteComment = useCallback((commentId: string) => {
+  const deleteComment = useCallback(async (commentId: string) => {
+    await supabase.from('node_comments').delete().eq('id', commentId);
     setComments(prev => prev.filter(c => c.id !== commentId));
   }, []);
 

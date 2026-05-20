@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 // v1.1 - Added Save button to context menu
 import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon, Save, CheckSquare } from 'lucide-react';
@@ -37,7 +38,8 @@ function formatDate(dateStr: string): string {
   }
 }
 import { SettingsModal } from './SettingsModal';
-import { NewItemModal } from './NewItemModal';
+import { ConfirmModal } from './ConfirmModal';
+import { NewItemModal, type NewItemData } from './NewItemModal';
 import { AiImportModal } from './AiImportModal';
 import { DocumentManager, DocumentItem } from './DocumentManager';
 import { TaskManager } from './TaskManager';
@@ -59,10 +61,14 @@ export interface ProcessItem {
   description: string;
   type: 'folder' | 'map' | 'markdown' | 'sector3d';
   updatedAt: string;
-  items?: ProcessItem[]; // For folders
-  content?: string; // For markdown
+  items?: ProcessItem[];
+  content?: string;
   parent_id?: string | null;
   tags?: string[];
+  visibility?: 'public' | 'departments' | 'private';
+  allowed_departments?: string[];
+  allowed_user_ids?: string[];
+  created_by?: string | null;
 }
 
 const initialData: ProcessItem[] = [
@@ -138,7 +144,7 @@ const initialData: ProcessItem[] = [
 ];
 
 interface DashboardProps {
-  currentUser: { id: string; name: string; email: string; role: string } | null;
+  currentUser: { id: string; name: string; email: string; role: string; department?: string } | null;
   onLogout: () => void;
   preferences: Preferences;
   setPreferences: (newPrefs: Partial<Preferences>) => void;
@@ -220,10 +226,26 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // ── Visibility filter ────────────────────────────────────────────────────
+  const visibleItems = (list: ProcessItem[]): ProcessItem[] => {
+    if (!currentUser) return [];
+    const isAdmin = currentUser.role === 'Administrador';
+    return list.filter(item => {
+      if (isAdmin) return true;
+      const v = item.visibility ?? 'public';
+      if (v === 'public') return true;
+      if (v === 'private') return item.created_by === currentUser.id;
+      const deptMatch = (item.allowed_departments ?? []).includes(currentUser.department ?? '');
+      const userMatch = (item.allowed_user_ids ?? []).includes(currentUser.id);
+      return deptMatch || userMatch || item.created_by === currentUser.id;
+    });
+  };
+
   const displayItems = currentFolder ? currentFolder.items || [] : items;
-  
-  const filteredItems = displayItems.filter(item => 
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const visibleDisplayItems = visibleItems(displayItems);
+
+  const filteredItems = visibleDisplayItems.filter(item =>
+    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -258,7 +280,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     }
   };
 
-  const handleCreateItem = async (data: { title: string; description: string; type: 'map' | 'folder' | 'markdown' | 'sector3d' }) => {
+  const handleCreateItem = async (data: NewItemData) => {
     // optimistic
     const newItem: ProcessItem = {
       id: Math.random().toString(),
@@ -291,7 +313,11 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
       description: data.description,
       type: data.type,
       parent_id: parentId,
-      tags: []
+      tags: [],
+      visibility: data.visibility,
+      allowed_departments: data.allowed_departments,
+      allowed_user_ids: data.allowed_user_ids,
+      created_by: currentUser?.id ?? null,
     }).select().single();
 
     if (error) {
@@ -304,9 +330,17 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     refreshData();
   };
 
-  const handleDeleteItem = async (id: string) => {
-    if(!confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá REMOVER este item permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) return;
-    
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const handleDeleteItem = (id: string) => {
+    setDeleteConfirm(id);
+  };
+
+  const doDeleteItem = async () => {
+    if (!deleteConfirm) return;
+    const id = deleteConfirm;
+    setDeleteConfirm(null);
+
     // Optimistic delete
     if (currentFolder) {
       setItems(items.map(f => {
@@ -320,7 +354,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     } else {
       setItems(items.filter(i => i.id !== id));
     }
-    
+
     await supabase.from('process_items').delete().eq('id', id);
     refreshData();
   };
@@ -341,6 +375,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   };
 
   return (
+    <>
     <MobileLayout currentUser={currentUser} onLogout={onLogout}>
     <div className="w-full h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans overflow-hidden relative">
       {/* Background Orbs */}
@@ -397,15 +432,6 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
           >
             {resolvedTheme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
-          {/* Sync Status */}
-          <SyncStatus
-            isOnline={isConnected}
-            isSyncing={isSyncing}
-            pendingCount={pendingCount}
-            lastSync={lastSync}
-            error={syncError}
-            onSync={syncAll}
-          />
           {/* User Menu */}
           <div className="relative">
             <button
@@ -723,10 +749,11 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
           />
         )}
         {isNewItemOpen && (
-          <NewItemModal 
-            onClose={() => setIsNewItemOpen(false)} 
-            onCreate={handleCreateItem} 
+          <NewItemModal
+            onClose={() => setIsNewItemOpen(false)}
+            onCreate={handleCreateItem}
             initialType={modalInitialType}
+            currentUser={currentUser ?? undefined}
           />
         )}
         
@@ -740,5 +767,20 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
 
     </div>
     </MobileLayout>
+
+    {deleteConfirm && createPortal(
+      <ConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={doDeleteItem}
+        title="Remover Item"
+        message="Tem certeza que deseja remover este item permanentemente? Esta ação não pode ser desfeita."
+        confirmText="Remover"
+        cancelText="Cancelar"
+        type="danger"
+      />,
+      document.body
+    )}
+    </>
   );
 }

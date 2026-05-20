@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 
 export interface AuditEntry {
   id: string;
@@ -11,58 +12,61 @@ export interface AuditEntry {
   category: 'auth' | 'config' | 'data' | 'security' | 'system';
 }
 
-const STORAGE_KEY = 'tecno_mapper_audit_log';
-const MAX_ENTRIES = 1000; // Limit to prevent storage overflow
+const MAX_ENTRIES = 1000;
 
 export function useAuditLog(enabled: boolean) {
   const [logs, setLogs] = useState<AuditEntry[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load logs from localStorage on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setLogs(parsed.slice(-MAX_ENTRIES)); // Keep only last 1000 entries
-      }
-    } catch (error) {
-      console.error('Error loading audit logs:', error);
-    }
-    setIsLoaded(true);
+    supabase
+      .from('audit_logs')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(MAX_ENTRIES)
+      .then(({ data }) => {
+        if (data) {
+          setLogs(data.map(r => ({
+            id: r.id,
+            timestamp: r.timestamp,
+            userName: r.user_name,
+            userEmail: r.user_email || '',
+            userRole: r.user_role || '',
+            action: r.action,
+            details: r.details || '',
+            category: r.category as AuditEntry['category'],
+          })));
+        }
+        setIsLoaded(true);
+      });
   }, []);
-
-  // Save to localStorage whenever logs change
-  useEffect(() => {
-    if (isLoaded && logs.length > 0) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(-MAX_ENTRIES)));
-      } catch (error) {
-        console.error('Error saving audit logs:', error);
-      }
-    }
-  }, [logs, isLoaded]);
 
   const addLog = useCallback((entry: Omit<AuditEntry, 'id' | 'timestamp'>) => {
     if (!enabled) return;
+    const timestamp = new Date().toISOString();
+    console.log(`[AUDIT] ${timestamp} | ${entry.userName} | ${entry.action} | ${entry.details}`);
 
     const newEntry: AuditEntry = {
       ...entry,
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
+      id: crypto.randomUUID(),
+      timestamp,
     };
+    setLogs(prev => [newEntry, ...prev.slice(0, MAX_ENTRIES - 1)]);
 
-    setLogs(prev => [...prev.slice(-MAX_ENTRIES + 1), newEntry]);
-
-    // Also log to console for immediate visibility
-    console.log(`[AUDIT] ${newEntry.timestamp} | ${newEntry.userName} | ${newEntry.action} | ${newEntry.details}`);
+    supabase.from('audit_logs').insert({
+      user_name: entry.userName,
+      user_email: entry.userEmail,
+      user_role: entry.userRole,
+      action: entry.action,
+      details: entry.details,
+      category: entry.category,
+      timestamp,
+    }).then(({ error }) => { if (error) console.error('Audit log error:', error); });
   }, [enabled]);
 
-  const clearLogs = useCallback(() => {
-    if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá APAGAR TODO O HISTÓRICO DE AUDITORIA.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
-      setLogs([]);
-      localStorage.removeItem(STORAGE_KEY);
-    }
+  const clearLogs = useCallback(async () => {
+    setLogs([]);
+    await supabase.from('audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   }, []);
 
   const exportAsTxt = useCallback(() => {

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Plus, Calendar, User, Flag, Folder, Link, 
-  ChevronDown, Check, AlertCircle, Clock
+  ChevronDown, Check, AlertCircle, Clock, Building2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -34,11 +34,32 @@ export function CreateTaskModal({
   onSuccess, 
   currentUser, 
   processItems,
-  users,
-  departments
+  users: usersProp,
+  departments: departmentsProp
 }: CreateTaskModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [departments, setDepartments] = useState<Department[]>(departmentsProp || []);
+  const [users, setUsers] = useState(usersProp || []);
+
+  // Fetch fresh data directly when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    Promise.all([
+      supabase.from('departments').select('id, name, color').order('name'),
+      supabase.from('users').select('id, name, email, role').order('name'),
+    ]).then(([{ data: depts }, { data: usrs }]) => {
+      if (depts && depts.length > 0) setDepartments(depts);
+      if (usrs && usrs.length > 0) setUsers(usrs);
+    });
+  }, [isOpen]);
+
+  // Dropdown open states
+  const [deptOpen, setDeptOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
+  const [priorityOpen, setPriorityOpen] = useState(false);
+  const [visibilityOpen, setVisibilityOpen] = useState(false);
+  const [processOpen, setProcessOpen] = useState(false);
+
   // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -66,6 +87,11 @@ export function CreateTaskModal({
     setDueDate('');
     setEstimatedHours('');
     setErrors({});
+    setDeptOpen(false);
+    setUserOpen(false);
+    setPriorityOpen(false);
+    setVisibilityOpen(false);
+    setProcessOpen(false);
   };
 
   const handleClose = () => {
@@ -108,7 +134,7 @@ export function CreateTaskModal({
         process_item_id: processItemId || null,
         due_date: dueDate || null,
         estimated_hours: estimatedHours ? parseInt(estimatedHours) : null,
-        created_by: currentUser?.id
+        created_by: currentUser?.id || null
       };
 
       const { error } = await supabase
@@ -143,7 +169,7 @@ export function CreateTaskModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -261,41 +287,55 @@ export function CreateTaskModal({
           <div className="grid grid-cols-2 gap-4">
             {/* Priority */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">
-                Prioridade
-              </label>
+              <label className="text-sm font-medium text-slate-300">Prioridade</label>
               <div className="relative">
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as Priority)}
-                  className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500/50"
-                >
-                  {Object.entries(priorityConfig).map(([key, config]) => (
-                    <option key={key} value={key} className="bg-slate-800">
-                      {config.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <button type="button" onClick={() => { setPriorityOpen(o => !o); setVisibilityOpen(false); setDeptOpen(false); setUserOpen(false); setProcessOpen(false); }}
+                  className="w-full flex items-center gap-2 px-4 py-3 bg-black/20 border border-white/10 hover:border-white/20 rounded-xl text-white transition-colors">
+                  <div className={cn('w-2 h-2 rounded-full shrink-0', priorityConfig[priority].color)} />
+                  <span className="flex-1 text-left text-sm">{priorityConfig[priority].label}</span>
+                  <ChevronDown size={14} className={cn('text-slate-400 transition-transform', priorityOpen && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {priorityOpen && (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}
+                      className="absolute top-full mt-1 left-0 right-0 z-30 bg-[#1e293b] border border-white/15 rounded-xl shadow-2xl overflow-hidden">
+                      {Object.entries(priorityConfig).map(([key, cfg]) => (
+                        <button key={key} type="button" onClick={() => { setPriority(key as Priority); setPriorityOpen(false); }}
+                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', priority === key ? 'bg-white/10 text-white' : 'text-slate-300')}>
+                          <div className={cn('w-2 h-2 rounded-full', cfg.color)} />
+                          {cfg.label}
+                          {priority === key && <Check size={13} className="ml-auto text-blue-400" />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
             {/* Visibility */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">
-                Visibilidade
-              </label>
+              <label className="text-sm font-medium text-slate-300">Visibilidade</label>
               <div className="relative">
-                <select
-                  value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as Visibility)}
-                  className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500/50"
-                >
-                  <option value="public" className="bg-slate-800">Pública (todos)</option>
-                  <option value="department" className="bg-slate-800">Departamento</option>
-                  <option value="private" className="bg-slate-800">Privada (só eu)</option>
-                </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <button type="button" onClick={() => { setVisibilityOpen(o => !o); setPriorityOpen(false); setDeptOpen(false); setUserOpen(false); setProcessOpen(false); }}
+                  className="w-full flex items-center gap-2 px-4 py-3 bg-black/20 border border-white/10 hover:border-white/20 rounded-xl text-white transition-colors">
+                  <span className="flex-1 text-left text-sm">{visibility === 'public' ? 'Pública (todos)' : visibility === 'department' ? 'Departamento' : 'Privada (só eu)'}</span>
+                  <ChevronDown size={14} className={cn('text-slate-400 transition-transform', visibilityOpen && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {visibilityOpen && (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}
+                      className="absolute top-full mt-1 left-0 right-0 z-30 bg-[#1e293b] border border-white/15 rounded-xl shadow-2xl overflow-hidden">
+                      {[['public','Pública (todos)'],['department','Departamento'],['private','Privada (só eu)']].map(([val, label]) => (
+                        <button key={val} type="button" onClick={() => { setVisibility(val as Visibility); setVisibilityOpen(false); }}
+                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', visibility === val ? 'bg-white/10 text-white' : 'text-slate-300')}>
+                          {label}
+                          {visibility === val && <Check size={13} className="ml-auto text-blue-400" />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>
@@ -304,70 +344,120 @@ export function CreateTaskModal({
           <div className="grid grid-cols-2 gap-4">
             {/* Department */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Folder size={14} />
-                Departamento
-              </label>
+              <label className="text-sm font-medium text-slate-300 flex items-center gap-2"><Building2 size={14} />Departamento</label>
               <div className="relative">
-                <select
-                  value={departmentId}
-                  onChange={(e) => setDepartmentId(e.target.value)}
-                  className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500/50"
-                >
-                  <option value="" className="bg-slate-800">Selecione...</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id} className="bg-slate-800">
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <button type="button" onClick={() => { setDeptOpen(o => !o); setUserOpen(false); setPriorityOpen(false); setVisibilityOpen(false); setProcessOpen(false); }}
+                  className="w-full flex items-center gap-2 px-4 py-3 bg-black/20 border border-white/10 hover:border-white/20 rounded-xl text-white transition-colors">
+                  {departmentId ? (
+                    <>
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: departments.find(d => d.id === departmentId)?.color || '#64748b' }} />
+                      <span className="flex-1 text-left text-sm">{departments.find(d => d.id === departmentId)?.name}</span>
+                    </>
+                  ) : (
+                    <span className="flex-1 text-left text-sm text-slate-500">Selecione...</span>
+                  )}
+                  <ChevronDown size={14} className={cn('text-slate-400 transition-transform shrink-0', deptOpen && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {deptOpen && (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}
+                      className="absolute top-full mt-1 left-0 right-0 z-30 bg-[#1e293b] border border-white/15 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto">
+                      <button type="button" onClick={() => { setDepartmentId(''); setDeptOpen(false); }}
+                        className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', !departmentId ? 'bg-white/10 text-white' : 'text-slate-400')}>
+                        Nenhum
+                        {!departmentId && <Check size={13} className="ml-auto text-blue-400" />}
+                      </button>
+                      <div className="border-t border-white/5" />
+                      {departments.map(dept => (
+                        <button key={dept.id} type="button" onClick={() => { setDepartmentId(dept.id); setDeptOpen(false); }}
+                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', departmentId === dept.id ? 'bg-white/10 text-white' : 'text-slate-300')}>
+                          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dept.color }} />
+                          {dept.name}
+                          {departmentId === dept.id && <Check size={13} className="ml-auto text-blue-400" />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
             {/* Assigned To */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <User size={14} />
-                Atribuir para
-              </label>
+              <label className="text-sm font-medium text-slate-300 flex items-center gap-2"><User size={14} />Atribuir para</label>
               <div className="relative">
-                <select
-                  value={assignedTo}
-                  onChange={(e) => setAssignedTo(e.target.value)}
-                  className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500/50"
-                >
-                  <option value="" className="bg-slate-800">Não atribuído</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id} className="bg-slate-800">
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <button type="button" onClick={() => { setUserOpen(o => !o); setDeptOpen(false); setPriorityOpen(false); setVisibilityOpen(false); setProcessOpen(false); }}
+                  className="w-full flex items-center gap-2 px-4 py-3 bg-black/20 border border-white/10 hover:border-white/20 rounded-xl text-white transition-colors">
+                  {assignedTo ? (
+                    <>
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                        {(users.find(u => u.id === assignedTo)?.name || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <span className="flex-1 text-left text-sm truncate">{users.find(u => u.id === assignedTo)?.name}</span>
+                    </>
+                  ) : (
+                    <span className="flex-1 text-left text-sm text-slate-500">Não atribuído</span>
+                  )}
+                  <ChevronDown size={14} className={cn('text-slate-400 transition-transform shrink-0', userOpen && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {userOpen && (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}
+                      className="absolute top-full mt-1 left-0 right-0 z-30 bg-[#1e293b] border border-white/15 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto">
+                      <button type="button" onClick={() => { setAssignedTo(''); setUserOpen(false); }}
+                        className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', !assignedTo ? 'bg-white/10 text-white' : 'text-slate-400')}>
+                        Não atribuído
+                        {!assignedTo && <Check size={13} className="ml-auto text-blue-400" />}
+                      </button>
+                      <div className="border-t border-white/5" />
+                      {users.map(u => (
+                        <button key={u.id} type="button" onClick={() => { setAssignedTo(u.id); setUserOpen(false); }}
+                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', assignedTo === u.id ? 'bg-white/10 text-white' : 'text-slate-300')}>
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="text-left flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{u.name}</p>
+                            <p className="text-[10px] text-slate-500">{u.role}</p>
+                          </div>
+                          {assignedTo === u.id && <Check size={13} className="ml-auto text-blue-400 shrink-0" />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
             {/* Link to Process */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Link size={14} />
-                Vincular a processo
-              </label>
+              <label className="text-sm font-medium text-slate-300 flex items-center gap-2"><Link size={14} />Vincular a processo</label>
               <div className="relative">
-                <select
-                  value={processItemId}
-                  onChange={(e) => setProcessItemId(e.target.value)}
-                  className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500/50"
-                >
-                  <option value="" className="bg-slate-800">Nenhum processo</option>
-                  {processItems.map((item) => (
-                    <option key={item.id} value={item.id} className="bg-slate-800">
-                      {item.title}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <button type="button" onClick={() => { setProcessOpen(o => !o); setDeptOpen(false); setUserOpen(false); setPriorityOpen(false); setVisibilityOpen(false); }}
+                  className="w-full flex items-center gap-2 px-4 py-3 bg-black/20 border border-white/10 hover:border-white/20 rounded-xl text-white transition-colors">
+                  <span className="flex-1 text-left text-sm truncate">{processItemId ? processItems.find(p => p.id === processItemId)?.title : <span className="text-slate-500">Nenhum processo</span>}</span>
+                  <ChevronDown size={14} className={cn('text-slate-400 transition-transform shrink-0', processOpen && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {processOpen && (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}
+                      className="absolute top-full mt-1 left-0 right-0 z-30 bg-[#1e293b] border border-white/15 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
+                      <button type="button" onClick={() => { setProcessItemId(''); setProcessOpen(false); }}
+                        className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', !processItemId ? 'bg-white/10 text-white' : 'text-slate-400')}>
+                        Nenhum processo
+                        {!processItemId && <Check size={13} className="ml-auto text-blue-400" />}
+                      </button>
+                      <div className="border-t border-white/5" />
+                      {processItems.map(item => (
+                        <button key={item.id} type="button" onClick={() => { setProcessItemId(item.id); setProcessOpen(false); }}
+                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', processItemId === item.id ? 'bg-white/10 text-white' : 'text-slate-300')}>
+                          {item.title}
+                          {processItemId === item.id && <Check size={13} className="ml-auto text-blue-400" />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>

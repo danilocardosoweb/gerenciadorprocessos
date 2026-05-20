@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Network, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (email: string, password: string) => boolean;
+  onLogin: (email: string, password: string) => boolean | Promise<boolean>;
   onClose?: () => void;
 }
 
@@ -28,7 +28,7 @@ export function Login({ onLogin, onClose }: LoginProps) {
     // Simula delay de autenticação
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const success = onLogin(email, password);
+    const success = await onLogin(email, password);
 
     if (!success) {
       setError('Email ou senha incorretos');

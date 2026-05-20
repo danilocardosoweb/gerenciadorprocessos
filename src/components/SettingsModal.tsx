@@ -1,10 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Users, Shield, Settings, Plus, Search, Check, ChevronRight, Edit2, Trash2, ArrowLeft, Save, FileText, Download, Trash, Filter, ClipboardList, Building2, Eye, Folder } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Preferences } from '../hooks/usePreferences';
 import { useAuditLog } from '../hooks/useAuditLog';
 import { useUsers } from '../hooks/useUsers';
+import { ConfirmModal } from './ConfirmModal';
+import { ROLE_DEFINITIONS, can, type UserRole } from '../lib/permissions';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -56,9 +59,10 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   } = useUsers();
 
   const [roles, setRoles] = useState<Role[]>([
-    { id: 1, name: 'Administrador', desc: 'Acesso total ao sistema, configurações e mapas.', users: 1 },
-    { id: 2, name: 'Editor', desc: 'Pode criar e editar mapas e documentos, mas não gerencia usuários.', users: 2 },
-    { id: 3, name: 'Visualizador', desc: 'Apenas visualiza mapas e documentos aprovados.', users: 0 },
+    { id: 1, name: 'Administrador', desc: ROLE_DEFINITIONS.Administrador.description, users: 0 },
+    { id: 2, name: 'Gerente',        desc: ROLE_DEFINITIONS.Gerente.description,       users: 0 },
+    { id: 3, name: 'Editor',         desc: ROLE_DEFINITIONS.Editor.description,        users: 0 },
+    { id: 4, name: 'Visualizador',   desc: ROLE_DEFINITIONS.Visualizador.description,  users: 0 },
   ]);
 
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
@@ -116,6 +120,8 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     setEditingId(null);
   };
 
+  const isAdmin = currentUser?.role === 'Administrador';
+
   const handleTabChange = (tab: 'users' | 'roles' | 'departments' | 'preferences' | 'audit') => {
     setActiveTab(tab);
     setActiveView('list');
@@ -148,15 +154,20 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     }
   };
 
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void; type?: 'danger' | 'warning' } | null>(null);
+
   const handleDeleteUser = async (id: string, roleName: string) => {
-    if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá REMOVER este usuário permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
-      const result = await deleteUser(id.toString());
-      if (result.success) {
-        setRoles(prev => prev.map(r => r.name === roleName ? { ...r, users: Math.max(0, r.users - 1) } : r));
-      } else {
-        alert('Erro ao excluir usuário: ' + result.error);
-      }
-    }
+    setConfirmState({
+      title: 'Remover Usuário',
+      message: 'Tem certeza que deseja remover este usuário permanentemente? Esta ação não pode ser desfeita.',
+      type: 'danger',
+      onConfirm: async () => {
+        const result = await deleteUser(id.toString());
+        if (result.success) {
+          setRoles(prev => prev.map(r => r.name === roleName ? { ...r, users: Math.max(0, r.users - 1) } : r));
+        }
+      },
+    });
   };
 
   const handleEditUser = (u: any) => {
@@ -185,9 +196,12 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   };
 
   const handleDeleteRole = (id: number) => {
-    if (confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá REMOVER este nível de acesso.\nUsuários com este nível poderão perder permissões.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) {
-      setRoles(roles.filter(r => r.id !== id));
-    }
+    setConfirmState({
+      title: 'Remover Nível de Acesso',
+      message: 'Tem certeza que deseja remover este nível de acesso? Usuários com este nível poderão perder permissões.',
+      type: 'warning',
+      onConfirm: () => setRoles(roles.filter(r => r.id !== id)),
+    });
   };
 
   const handleEditRole = (r: Role) => {
@@ -200,6 +214,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   const filteredUsers = users.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 sm:p-12">
       <motion.div 
         initial={{ opacity: 0 }}
@@ -253,14 +268,16 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
               <Settings size={18} />
               Preferências
             </button>
-            <button 
-              onClick={() => handleTabChange('audit')}
-              className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'audit' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
-            >
-              <ClipboardList size={18} />
-              Auditoria
-              <span className="ml-1 px-2 py-0.5 bg-slate-700 rounded-full text-xs">{totalCount}</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => handleTabChange('audit')}
+                className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'audit' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
+              >
+                <ClipboardList size={18} />
+                Auditoria
+                <span className="ml-1 px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-[10px] font-bold border border-red-500/20">Admin</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -518,29 +535,92 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {roles.map(r => (
-                      <div key={r.id} className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-colors flex flex-col h-full group">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center">
-                            <Shield size={24} className="text-purple-400" />
+                  {/* Roles Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    {(Object.keys(ROLE_DEFINITIONS) as UserRole[]).map(roleKey => {
+                      const def = ROLE_DEFINITIONS[roleKey];
+                      const count = users.filter(u => u.role === roleKey).length;
+                      return (
+                        <div key={roleKey} className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 hover:border-white/20 transition-all flex flex-col gap-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center border', def.badge.replace('text-', 'border-').replace('/30','').replace('/15',''))} style={{background:'rgba(255,255,255,0.04)'}}>
+                                <Shield size={18} className={def.color} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-white text-sm">{def.label}</h4>
+                                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', def.badge)}>{count} usuário{count !== 1 ? 's' : ''}</span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{def.description}</p>
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/5 text-slate-400 border border-white/10">
-                            {r.users} usuários
-                          </span>
+                          <div className="space-y-1">
+                            {def.permissions.map((p, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs text-slate-400">
+                                <div className={cn('w-1 h-1 rounded-full shrink-0', def.color.replace('text-','bg-'))} />
+                                {p}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <h4 className="text-lg font-bold text-white mb-2">{r.name}</h4>
-                        <p className="text-sm text-slate-400 mb-6 flex-1">{r.desc}</p>
-                        <div className="pt-4 border-t border-white/5 flex items-center gap-2 justify-end">
-                          <button onClick={() => handleEditRole(r)} className="p-2 text-slate-500 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Editar">
-                            <Edit2 size={16} />
-                          </button>
-                          <button onClick={() => handleDeleteRole(r.id)} className="p-2 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors" title="Excluir">
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
+                  </div>
+
+                  {/* Full Permission Matrix */}
+                  <div className="bg-white/[0.02] border border-white/10 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-3 border-b border-white/10 bg-white/[0.02]">
+                      <h4 className="text-sm font-bold text-white">Matriz de Permissões</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Visão consolidada de todas as capacidades por nível</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-white/10">
+                            <th className="px-4 py-2.5 text-left text-slate-500 font-semibold w-48">Ação</th>
+                            {(Object.keys(ROLE_DEFINITIONS) as UserRole[]).map(r => (
+                              <th key={r} className={cn('px-4 py-2.5 text-center font-bold', ROLE_DEFINITIONS[r].color)}>{r}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {([
+                            ['Ver Tarefas',             'viewTasks'],
+                            ['Criar Tarefas',           'createTask'],
+                            ['Editar Próprias Tarefas', 'editTask'],
+                            ['Mover Tarefas',           'moveTask'],
+                            ['Aprovar Tarefas',         'approveTask'],
+                            ['Excluir Tarefas',         'deleteTask'],
+                            ['Excluir Qualquer Tarefa', 'deleteAnyTask'],
+                            ['Comentar',               'commentTask'],
+                            ['Criar Nó no Mapa',        'createNode'],
+                            ['Excluir Nó no Mapa',      'deleteNode'],
+                            ['Ver Analytics',           'viewAnalytics'],
+                            ['Analytics Completo',      'viewFullAnalytics'],
+                            ['Gerenciar Usuários',      'manageUsers'],
+                            ['Ver Logs de Auditoria',   'viewAuditLog'],
+                            ['Limpar Logs',             'clearAuditLog'],
+                          ] as [string, keyof typeof can][]).map(([label, permKey]) => (
+                            <tr key={permKey} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                              <td className="px-4 py-2 text-slate-400">{label}</td>
+                              {(Object.keys(ROLE_DEFINITIONS) as UserRole[]).map(roleKey => {
+                                const mockUser = { id: '', name: '', email: '', role: roleKey };
+                                const allowed = can[permKey]?.(mockUser) ?? false;
+                                return (
+                                  <td key={roleKey} className="px-4 py-2 text-center">
+                                    {allowed
+                                      ? <span className="text-emerald-400 font-bold">✓</span>
+                                      : <span className="text-slate-700">—</span>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -734,9 +814,12 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                       <p className="text-sm text-red-400/80 mt-1 mb-4">Ações destrutivas que afetam todos os usuários da organização.</p>
                       <button
                         onClick={() => {
-                          if (confirm('Atenção: Tem certeza que deseja apagar os dados da organização? Esta ação é irreversível.')) {
-                            alert('Organização bloqueada para exclusão (modo de demonstração).');
-                          }
+                          setConfirmState({
+                            title: 'Excluir Organização',
+                            message: 'Tem certeza que deseja excluir os dados da organização? Esta ação é irreversível e afeta todos os usuários.',
+                            type: 'danger',
+                            onConfirm: () => {},
+                          });
                         }}
                         className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-sm rounded-xl transition-colors"
                       >
@@ -935,10 +1018,13 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                             </button>
                             {!dept.isDefault && (
                               <button
-                                onClick={async () => {
-                                  if (confirm(`Tem certeza que deseja excluir o departamento "${dept.name}"?`)) {
-                                    await deleteDepartment(dept.id);
-                                  }
+                                onClick={() => {
+                                  setConfirmState({
+                                    title: 'Excluir Departamento',
+                                    message: `Tem certeza que deseja excluir o departamento "${dept.name}"? Esta ação não pode ser desfeita.`,
+                                    type: 'danger',
+                                    onConfirm: () => deleteDepartment(dept.id),
+                                  });
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                               >
@@ -1094,6 +1180,21 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
         </div>
       </motion.div>
     </div>
+
+    {confirmState && createPortal(
+      <ConfirmModal
+        isOpen={!!confirmState}
+        onClose={() => setConfirmState(null)}
+        onConfirm={() => { confirmState.onConfirm(); setConfirmState(null); }}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText="Confirmar"
+        cancelText="Cancelar"
+        type={confirmState.type || 'danger'}
+      />,
+      document.body
+    )}
+    </>
   );
 }
 
