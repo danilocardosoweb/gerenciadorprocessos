@@ -76,7 +76,11 @@ export function useSupabase() {
       size: doc.size,
       uploadDate: doc.upload_date,
       expirationDate: doc.expiration_date,
-      status: doc.status
+      status: doc.status,
+      visibility: doc.visibility || 'public',
+      department: doc.department || undefined,
+      specific_user_id: doc.specific_user_id || null,
+      created_by: doc.created_by || null,
     }));
     
     setDocuments(docs);

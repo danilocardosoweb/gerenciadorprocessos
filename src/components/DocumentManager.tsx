@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { FileText, Image as ImageIcon, AlertTriangle, CheckCircle2, CloudUpload, Search, File, Trash2, Download, MoreVertical, FileBadge, Edit3 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FileText, Image as ImageIcon, AlertTriangle, CheckCircle2, CloudUpload, Search, File, Trash2, Download, MoreVertical, FileBadge, Edit3, Globe, Building2, User, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DocumentUploadModal } from './DocumentUploadModal';
 
 import { supabase } from '../lib/supabase';
+
+export type DocVisibility = 'public' | 'department' | 'specific' | 'private';
 
 export interface DocumentItem {
   id: string;
@@ -14,22 +16,61 @@ export interface DocumentItem {
   uploadDate: string;
   expirationDate: string | null;
   status: 'valid' | 'expiring' | 'expired';
+  visibility: DocVisibility;
+  department?: string;
+  specific_user_id?: string | null;
+  specific_user_name?: string;
+  created_by?: string | null;
 }
 
 export interface DocumentManagerProps {
   documents: DocumentItem[];
   setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>;
   refreshData?: () => void;
+  currentUser?: { id: string; name: string; email: string; role: string; department?: string } | null;
+  users?: { id: string; name: string; email: string; role: string }[];
+  departments?: { id: string; name: string; color: string }[];
 }
 
-export function DocumentManager({ documents, setDocuments, refreshData }: DocumentManagerProps) {
+const visibilityConfig: Record<DocVisibility, { icon: React.FC<{ size?: number; className?: string }>; label: string; color: string }> = {
+  public:     { icon: Globe,     label: 'Público',      color: 'text-emerald-400' },
+  department: { icon: Building2, label: 'Departamento', color: 'text-blue-400'    },
+  specific:   { icon: User,      label: 'Específico',   color: 'text-violet-400'  },
+  private:    { icon: Lock,      label: 'Privado',      color: 'text-slate-400'   },
+};
+
+export function DocumentManager({ documents, setDocuments, refreshData, currentUser, users: usersProp = [], departments: deptsProp = [] }: DocumentManagerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [users, setUsers] = useState(usersProp);
+  const [departments, setDepartments] = useState(deptsProp);
 
-  const filteredDocs = documents.filter(doc => 
-    doc.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    if (usersProp.length === 0 || deptsProp.length === 0) {
+      Promise.all([
+        supabase.from('users').select('id, name, email, role').order('name'),
+        supabase.from('departments').select('id, name, color').order('name'),
+      ]).then(([{ data: u }, { data: d }]) => {
+        if (u) setUsers(u);
+        if (d) setDepartments(d);
+      });
+    }
+  }, []);
+
+  const filteredDocs = documents.filter(doc => {
+    if (!doc.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    // Visibility filter
+    if (doc.visibility === 'private' && doc.created_by !== currentUser?.id) return false;
+    if (doc.visibility === 'specific') {
+      if (doc.created_by !== currentUser?.id && doc.specific_user_id !== currentUser?.id) return false;
+    }
+    if (doc.visibility === 'department') {
+      const userDept = currentUser?.department;
+      if (doc.created_by !== currentUser?.id && userDept && doc.department && userDept !== doc.department) return false;
+    }
+    return true;
+  });
 
   const validCount = documents.filter(d => d.status === 'valid').length;
   const expiringCount = documents.filter(d => d.status === 'expiring').length;
@@ -39,25 +80,29 @@ export function DocumentManager({ documents, setDocuments, refreshData }: Docume
     // optimistic update
     if (editingDoc) {
       setDocuments(documents.map(d => d.id === doc.id ? doc : d));
-      // Supabase update
       await supabase.from('documents').update({
         name: doc.name,
         type: doc.type,
         size: doc.size,
         expiration_date: doc.expirationDate,
-        status: doc.status
+        status: doc.status,
+        visibility: doc.visibility,
+        department: doc.department || null,
+        specific_user_id: doc.specific_user_id || null,
       }).eq('id', doc.id);
     } else {
-      const tempId = doc.id;
       setDocuments([doc, ...documents]);
-      
       const { data, error } = await supabase.from('documents').insert({
         name: doc.name,
         type: doc.type,
         size: doc.size,
         upload_date: doc.uploadDate,
         expiration_date: doc.expirationDate,
-        status: doc.status
+        status: doc.status,
+        visibility: doc.visibility,
+        department: doc.department || null,
+        specific_user_id: doc.specific_user_id || null,
+        created_by: currentUser?.id || null,
       }).select().single();
       
       if (data && refreshData) refreshData();
@@ -154,7 +199,8 @@ export function DocumentManager({ documents, setDocuments, refreshData }: Docume
                 <th className="px-6 py-4 font-medium">Tamanho</th>
                 <th className="px-6 py-4 font-medium">Upload</th>
                 <th className="px-6 py-4 font-medium">Vencimento</th>
-                <th className="px-6 py-4 font-medium">Status</th>
+                <th className="px-6 py-4 font-medium">Visibilidade</th>
+              <th className="px-6 py-4 font-medium">Status</th>
                 <th className="px-6 py-4 font-medium text-right">Ações</th>
               </tr>
             </thead>
@@ -182,6 +228,20 @@ export function DocumentManager({ documents, setDocuments, refreshData }: Docume
                     <td className="px-6 py-4 text-sm text-slate-400">{doc.size}</td>
                     <td className="px-6 py-4 text-sm text-slate-400">{doc.uploadDate}</td>
                     <td className="px-6 py-4 text-sm text-slate-400">{doc.expirationDate || '-'}</td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const vcfg = visibilityConfig[doc.visibility || 'public'];
+                        const VIcon = vcfg.icon;
+                        return (
+                          <span className={cn('flex items-center gap-1.5 text-xs font-semibold', vcfg.color)}>
+                            <VIcon size={13} />
+                            {vcfg.label}
+                            {doc.visibility === 'department' && doc.department && ` · ${doc.department}`}
+                            {doc.visibility === 'specific' && doc.specific_user_name && ` · ${doc.specific_user_name}`}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-4">
                       <span className={cn(
                         "px-2.5 py-1 rounded-full text-xs font-semibold flex items-center justify-center w-max gap-1.5",
@@ -243,6 +303,9 @@ export function DocumentManager({ documents, setDocuments, refreshData }: Docume
             }}
             onSave={handleSaveDoc}
             initialData={editingDoc || undefined}
+            currentUser={currentUser}
+            users={users}
+            departments={departments}
           />
         )}
       </AnimatePresence>

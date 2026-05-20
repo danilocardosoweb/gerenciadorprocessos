@@ -565,7 +565,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
           )}
 
           {folderTab === 'docs' ? (
-            <DocumentManager documents={documents} setDocuments={setDocuments} refreshData={refreshData} />
+            <DocumentManager documents={documents} setDocuments={setDocuments} refreshData={refreshData} currentUser={currentUser} />
           ) : folderTab === 'tasks' ? (
             <TaskManager 
               currentUser={currentUser} 
