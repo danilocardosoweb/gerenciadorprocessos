@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Network, FolderOpen, FileText, Box } from 'lucide-react';
+import { X, Network, FolderOpen, FileText, Box, Lightbulb, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface NewItemModalProps {
@@ -13,6 +13,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map' }: NewItem
   const [type, setType] = useState<'map' | 'folder' | 'markdown' | 'sector3d'>(initialType);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [showKaizenInfo, setShowKaizenInfo] = useState(initialType === 'markdown');
 
   const handleCreate = () => {
     if (title.trim()) {
@@ -61,7 +62,10 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map' }: NewItem
             return (
               <button
                 key={t.id}
-                onClick={() => setType(t.id)}
+                onClick={() => {
+                  setType(t.id);
+                  setShowKaizenInfo(t.id === 'markdown');
+                }}
                 className={cn(
                   "flex-1 flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border transition-all",
                   isSelected ? "bg-white/10 border-white/20 shadow-inner" : "bg-white/5 border-transparent hover:bg-white/10 opacity-60 hover:opacity-100"
@@ -75,6 +79,35 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map' }: NewItem
             );
           })}
         </div>
+
+        {/* Kaizen Info Box */}
+        {showKaizenInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-6 bg-purple-500/15 border border-purple-500/30 rounded-2xl p-4"
+          >
+            <div className="flex gap-3">
+              <Lightbulb className="text-purple-400 shrink-0 mt-0.5" size={18} />
+              <div className="text-sm text-slate-300">
+                <p className="font-semibold text-purple-300 mb-2">💡 O que é Kaizen?</p>
+                <p className="text-xs leading-relaxed mb-2">
+                  <strong>Kaizen</strong> significa "melhoria contínua" em japonês. Use este espaço para:
+                </p>
+                <ul className="text-xs space-y-1 text-slate-400 ml-4">
+                  <li>✓ Sugerir melhorias nos processos</li>
+                  <li>✓ Documentar problemas encontrados</li>
+                  <li>✓ Propor soluções inovadoras</li>
+                  <li>✓ Compartilhar ideias com a equipe</li>
+                </ul>
+                <p className="text-xs text-slate-500 mt-2 italic">
+                  Escreva em Markdown (títulos, listas, links, etc) e clique em "Editar" depois para modificar.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <div className="space-y-6">
           <div>

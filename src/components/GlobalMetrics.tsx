@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
-import { Target, BarChart3, Clock, AlertTriangle, ShieldCheck, Zap } from 'lucide-react';
+import { Target, BarChart3, Clock, AlertTriangle, ShieldCheck, Zap, HelpCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useState } from 'react';
 
 export interface GlobalMetricsProps {
   mappedProcessesCount: number;
@@ -13,6 +14,8 @@ export interface GlobalMetricsProps {
 }
 
 export function GlobalMetrics({ mappedProcessesCount, expiringDocsCount, ideasCount, complianceScore, onAddProcess, onViewDocs, onAddIdea }: GlobalMetricsProps) {
+  const [showKaizenHelp, setShowKaizenHelp] = useState(false);
+
   // Sparkline generator mock data depending on score
   const sparklineData = Array.from({ length: 7 }, (_, i) => {
     return Math.max(30, Math.min(100, complianceScore - 15 + (Math.random() * 30)));
@@ -90,31 +93,51 @@ export function GlobalMetrics({ mappedProcessesCount, expiringDocsCount, ideasCo
 
       <motion.div 
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} 
-        className="bg-purple-500/10 border border-purple-500/20 p-5 rounded-2xl flex flex-col justify-between hover:bg-purple-500/[0.15] transition-colors"
+        className="relative bg-purple-500/10 border border-purple-500/20 p-5 rounded-2xl flex flex-col justify-between hover:bg-purple-500/[0.15] transition-colors group"
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3 text-purple-400">
             <Zap size={20} />
             <span className="text-sm font-semibold">Ideias (Kaizen)</span>
           </div>
+          <button
+            onClick={() => setShowKaizenHelp(!showKaizenHelp)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-purple-400 hover:text-purple-300"
+            title="O que é Kaizen?"
+          >
+            <HelpCircle size={16} />
+          </button>
         </div>
+
+        {/* Help tooltip */}
+        {showKaizenHelp && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="absolute top-full left-0 right-0 mt-2 bg-[#1e293b] border border-purple-500/30 rounded-xl p-4 text-xs text-slate-300 z-20 shadow-xl"
+          >
+            <p className="font-semibold text-purple-300 mb-2">💡 Como usar Ideias (Kaizen):</p>
+            <ul className="space-y-1.5 text-slate-400">
+              <li>✓ Clique em <strong>"Nova Ideia"</strong> para criar uma sugestão de melhoria</li>
+              <li>✓ Escreva em <strong>Markdown</strong> (títulos, listas, links, etc)</li>
+              <li>✓ Descreva o problema e sua solução proposta</li>
+              <li>✓ Clique em <strong>"Editar"</strong> para modificar depois</li>
+              <li>✓ Compartilhe com a equipe para análise e implementação</li>
+            </ul>
+          </motion.div>
+        )}
+
         <div className="flex items-end justify-between">
           <div>
             <span className="text-3xl font-bold text-purple-400">{ideasCount}</span>
             <span className="text-xs text-slate-400 ml-2">em análise</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-2 mr-2">
-              {Array.from({length: Math.min(ideasCount, 3)}).map((_, i) => (
-                <div key={i} className={`w-6 h-6 rounded-full border-2 border-[#0f172a] bg-slate-700 flex items-center justify-center text-[8px] font-bold text-white z-${10-i}`}>
-                  U{i + 1}
-                </div>
-              ))}
-            </div>
-            <button onClick={onAddIdea} className="text-[10px] uppercase font-bold px-2 py-1 bg-purple-500/20 text-purple-400 rounded-md hover:bg-purple-500/30">
-              Nova Ideia
-            </button>
-          </div>
+          <button 
+            onClick={onAddIdea} 
+            className="text-[10px] uppercase font-bold px-3 py-2 bg-purple-500/30 text-purple-300 rounded-lg hover:bg-purple-500/50 transition-colors"
+          >
+            + Nova Ideia
+          </button>
         </div>
       </motion.div>
     </div>
