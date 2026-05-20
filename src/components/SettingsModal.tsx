@@ -55,7 +55,8 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     deleteUser,
     addDepartment,
     updateDepartment,
-    deleteDepartment
+    deleteDepartment,
+    refetch: refetchUsers,
   } = useUsers();
 
   const [roles, setRoles] = useState<Role[]>([
@@ -324,8 +325,9 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all text-white placeholder:text-slate-500"
                         />
                       </div>
-                      <div className="text-sm text-slate-400 font-medium ml-auto">
-                        {users.length} usuário(s)
+                      <div className="text-sm text-slate-400 font-medium ml-auto flex items-center gap-2">
+                        {usersLoading ? 'Carregando...' : `${users.length} usuário(s)`}
+                        {!usersLoading && <button onClick={refetchUsers} className="text-xs text-blue-400 hover:text-blue-300 transition-colors" title="Recarregar">↻</button>}
                       </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -340,10 +342,29 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredUsers.length === 0 && (
+                          {usersLoading && (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                                Carregando usuários...
+                              </td>
+                            </tr>
+                          )}
+                          {!usersLoading && usersError && (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-8 text-center">
+                                <p className="text-red-400 text-sm mb-3">Erro ao carregar: {usersError}</p>
+                                <button onClick={refetchUsers} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors">
+                                  Tentar novamente
+                                </button>
+                              </td>
+                            </tr>
+                          )}
+                          {!usersLoading && !usersError && filteredUsers.length === 0 && (
                             <tr>
                               <td colSpan={5} className="px-6 py-8 text-center text-slate-500 border-b border-white/5">
-                                Nenhum usuário encontrado.
+                                {users.length === 0 ? (
+                                  <span>Nenhum usuário no banco. <button onClick={refetchUsers} className="underline text-blue-400 hover:text-blue-300">Recarregar</button></span>
+                                ) : 'Nenhum usuário encontrado.'}
                               </td>
                             </tr>
                           )}

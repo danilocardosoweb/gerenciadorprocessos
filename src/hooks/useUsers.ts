@@ -32,12 +32,22 @@ export function useUsers() {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [{ data: usersData }, { data: deptsData }] = await Promise.all([
-      supabase.from('users').select('*').order('name'),
-      supabase.from('departments').select('*').order('name'),
+    setError(null);
+    const [{ data: usersData, error: usersErr }, { data: deptsData, error: deptsErr }] = await Promise.all([
+      supabase.from('users').select('*').order('created_at', { ascending: false }),
+      supabase.from('departments').select('*').order('name', { nullsFirst: false }),
     ]);
-    if (usersData) setUsers(usersData.map(u => ({ ...u, status: u.status || 'Ativo' })));
-    if (deptsData) setDepartments(deptsData);
+    if (usersErr) {
+      console.error('❌ useUsers fetchAll error:', usersErr);
+      setError(usersErr.message);
+    } else if (usersData) {
+      setUsers(usersData.map(u => ({ ...u, status: u.status || 'Ativo' })));
+    }
+    if (deptsErr) {
+      console.error('❌ useUsers fetchDepts error:', deptsErr);
+    } else if (deptsData) {
+      setDepartments(deptsData);
+    }
     setLoading(false);
   };
 
