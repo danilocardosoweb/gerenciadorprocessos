@@ -91,7 +91,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     }
   }, [externalSetPreferences]);
 
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | string | null>(null);
   
   // Form States
   const [userName, setUserName] = useState('');
@@ -141,7 +141,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
 
     let result;
     if (activeView === 'edit_user' && editingId) {
-      result = await updateUser(editingId.toString(), userData);
+      result = await updateUser(String(editingId), userData);
     } else {
       result = await createUser(userData);
     }
@@ -177,7 +177,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     setUserRole(u.role);
     setUserDepartment(u.department || '');
     setUserStatus(u.status);
-    setEditingId(parseInt(u.id) || Date.now());
+    setEditingId(u.id);
     setActiveView('edit_user');
   };
 
