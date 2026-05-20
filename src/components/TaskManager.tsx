@@ -136,8 +136,8 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
         .select(`
           *,
           assigned_user:users!tasks_assigned_to_fkey(*),
-          process_item:process_items(id, title, type),
-          department_data:departments(id, name, color, icon)
+          process_item:process_items(*),
+          department_data:departments(*)
         `)
         .order('created_at', { ascending: false });
 
