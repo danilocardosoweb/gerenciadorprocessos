@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 // v1.1 - Added Save button to context menu
-import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon, Save, CheckSquare } from 'lucide-react';
+import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon, Save, CheckSquare, Globe, Lock, Building2, Eye, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 // Helper to format dates nicely
@@ -215,6 +215,31 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   
   // Context Menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // Visibility edit modal
+  const [visibilityItem, setVisibilityItem] = useState<ProcessItem | null>(null);
+  const [visEditValue, setVisEditValue] = useState<'public' | 'departments' | 'private'>('public');
+  const [visEditDepts, setVisEditDepts] = useState<string[]>([]);
+  const [allDepts, setAllDepts] = useState<{ id: string; name: string; color: string }[]>([]);
+
+  useEffect(() => {
+    supabase.from('departments').select('id,name,color').order('name').then(({ data }) => {
+      if (data) setAllDepts(data);
+    });
+  }, []);
+
+  const handleSaveVisibility = async () => {
+    if (!visibilityItem) return;
+    const upd = {
+      visibility: visEditValue,
+      allowed_departments: visEditValue === 'departments' ? visEditDepts : [],
+    };
+    const { error } = await supabase.from('process_items').update(upd).eq('id', visibilityItem.id);
+    if (error) { alert('Erro ao salvar: ' + error.message); return; }
+    setItems(prev => prev.map(i => i.id === visibilityItem.id ? { ...i, ...upd } : i));
+    setVisibilityItem(null);
+    refreshData();
+  };
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -662,6 +687,20 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                               >
                                 <Save size={16} /> Salvar
                               </button>
+                              {(currentUser?.role === 'Administrador' || item.created_by === currentUser?.id) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuId(null);
+                                    setVisEditValue(item.visibility ?? 'public');
+                                    setVisEditDepts(item.allowed_departments ?? []);
+                                    setVisibilityItem(item);
+                                  }}
+                                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                                >
+                                  <Eye size={16} /> Visibilidade
+                                </button>
+                              )}
                               <div className="h-px bg-white/5 my-1 mx-2" />
                               <button 
                                 onClick={(e) => {
@@ -767,6 +806,73 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
 
     </div>
     </MobileLayout>
+
+    {visibilityItem && createPortal(
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => setVisibilityItem(null)}
+          className="absolute inset-0 bg-[#0f172a]/80 backdrop-blur-sm" />
+        <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+          className="relative w-full max-w-sm bg-[#1e293b] border border-white/10 rounded-2xl shadow-2xl p-6">
+          <h2 className="text-lg font-bold text-white mb-1">Visibilidade do Item</h2>
+          <p className="text-xs text-slate-400 mb-5 truncate">{visibilityItem.title}</p>
+
+          <div className="grid grid-cols-3 gap-2 mb-5">
+            {([
+              ['public',      'Público',   'Todos podem ver',              Globe,     'text-emerald-400', 'border-emerald-500/40 bg-emerald-500/10'],
+              ['departments', 'Restrito',  'Só departamentos selecionados', Building2, 'text-amber-400',   'border-amber-500/40 bg-amber-500/10'],
+              ['private',     'Privado',   'Só você e admins',             Lock,      'text-red-400',     'border-red-500/40 bg-red-500/10'],
+            ] as const).map(([val, label, desc, Icon, color, activeStyle]) => (
+              <button key={val} type="button"
+                onClick={() => setVisEditValue(val)}
+                className={cn('flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border text-center transition-all text-xs',
+                  visEditValue === val ? `${activeStyle} border` : 'border-white/10 bg-white/[0.03] hover:bg-white/5 opacity-60 hover:opacity-100')}>
+                <Icon size={18} className={cn(visEditValue === val ? color : 'text-slate-400')} />
+                <span className={cn('font-semibold', visEditValue === val ? 'text-white' : 'text-slate-400')}>{label}</span>
+                <span className="text-[10px] text-slate-500 leading-tight">{desc}</span>
+                {visEditValue === val && <Check size={11} className={cn('mt-0.5', color)} />}
+              </button>
+            ))}
+          </div>
+
+          {visEditValue === 'departments' && (
+            <div className="mb-5">
+              <p className="text-xs font-semibold text-slate-400 mb-2">Departamentos com acesso</p>
+              <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                {allDepts.map(d => {
+                  const sel = visEditDepts.includes(d.name);
+                  return (
+                    <button key={d.id} type="button"
+                      onClick={() => setVisEditDepts(prev => sel ? prev.filter(n => n !== d.name) : [...prev, d.name])}
+                      className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                        sel ? 'bg-amber-500/15 text-white' : 'hover:bg-white/5 text-slate-400')}>
+                      <div className="w-3 h-3 rounded-sm border flex items-center justify-center shrink-0 transition-colors"
+                        style={{ borderColor: sel ? d.color : undefined, backgroundColor: sel ? d.color + '44' : undefined }}>
+                        {sel && <Check size={9} className="text-white" />}
+                      </div>
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                      {d.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button onClick={() => setVisibilityItem(null)}
+              className="flex-1 px-4 py-2.5 border border-white/10 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors">
+              Cancelar
+            </button>
+            <button onClick={handleSaveVisibility}
+              className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-blue-500/20">
+              Salvar
+            </button>
+          </div>
+        </motion.div>
+      </div>,
+      document.body
+    )}
 
     {deleteConfirm && createPortal(
       <ConfirmModal
