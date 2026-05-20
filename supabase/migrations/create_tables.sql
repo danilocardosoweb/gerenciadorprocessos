@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   priority TEXT DEFAULT 'Média',
   status TEXT DEFAULT 'Pendente',
   assigned_to UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
   process_item_id UUID,
   department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
   parent_id UUID REFERENCES public.tasks(id) ON DELETE CASCADE,
@@ -63,7 +64,7 @@ INSERT INTO public.roles (name, description) VALUES
   ('Administrador', 'Acesso total ao sistema'),
   ('Editor', 'Pode criar e editar processos'),
   ('Visualizador', 'Apenas visualização')
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- Insert default departments
 INSERT INTO public.departments (name, color, icon) VALUES
@@ -71,4 +72,4 @@ INSERT INTO public.departments (name, color, icon) VALUES
   ('Qualidade', '#f59e0b', 'CheckCircle'),
   ('Logística', '#3b82f6', 'Truck'),
   ('Manutenção', '#8b5cf6', 'Wrench')
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT DO NOTHING;
