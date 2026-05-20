@@ -368,20 +368,20 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   };
 
   const sendComment = async () => {
-    if (!newComment.trim() || !detailTask || !currentUser) return;
-    const payload = { task_id: detailTask.id, user_id: currentUser.id, content: newComment.trim() };
+    if (!(newComment || '').trim() || !detailTask || !currentUser) return;
+    const payload = { task_id: detailTask.id, user_id: currentUser.id, content: (newComment || '').trim() };
     const { data } = await supabase.from('task_comments').insert(payload).select('*, user:users!task_comments_user_id_fkey(name, email)').single();
     if (data) setComments(prev => [...prev, data]);
     setNewComment('');
   };
 
   const sendAlert = async () => {
-    if (!newAlert.message.trim() || !detailTask || !currentUser) return;
+    if (!(newAlert.message || '').trim() || !detailTask || !currentUser) return;
     const payload = {
       task_id: detailTask.id,
       from_user_id: currentUser.id,
       to_user_id: newAlert.to_user_id || null,
-      message: newAlert.message.trim(),
+      message: (newAlert.message || '').trim(),
       type: newAlert.type,
     };
     const { data } = await supabase.from('task_alerts').insert(payload)
