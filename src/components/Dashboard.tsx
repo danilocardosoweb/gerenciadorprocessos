@@ -402,8 +402,18 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
 
   return (
     <>
-    <MobileLayout currentUser={currentUser} onLogout={onLogout}>
-    <div className="app-shell w-full h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans overflow-hidden relative" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', transition: 'background-color 0.3s ease, color 0.3s ease' }}>
+    <MobileLayout
+      currentUser={currentUser}
+      onLogout={onLogout}
+      activeTab={folderTab}
+      onNavigate={(tab) => {
+        setFolderTab(tab as 'items' | 'docs' | 'tasks');
+        setCurrentFolder(null);
+      }}
+      onNewItem={() => setIsNewItemOpen(true)}
+      onOpenSettings={() => setIsSettingsOpen(true)}
+    >
+    <div className="app-shell w-full h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans overflow-hidden relative pt-14 lg:pt-0" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', transition: 'background-color 0.3s ease, color 0.3s ease' }}>
       {/* Background Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[140px] pointer-events-none z-0"></div>
