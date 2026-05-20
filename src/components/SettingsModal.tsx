@@ -216,7 +216,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 sm:p-12">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-6 lg:p-12">
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -226,57 +226,66 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
       />
 
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-6xl h-[85vh] bg-[#1e293b]/90 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden flex shadow-2xl shadow-blue-900/20"
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        className="relative w-full sm:max-w-6xl h-[92vh] sm:h-[85vh] bg-[#1e293b]/95 backdrop-blur-xl border border-white/10 sm:rounded-3xl rounded-t-3xl overflow-hidden flex flex-col sm:flex-row shadow-2xl shadow-blue-900/20"
       >
-        {/* Sidebar */}
-        <div className="w-64 bg-slate-900/50 border-r border-white/5 p-6 flex flex-col pt-8">
+        {/* ── Mobile top header ── */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 sm:hidden shrink-0">
+          <h2 className="text-base font-bold text-white">Ajustes</h2>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* ── Mobile tab bar (horizontal scroll) ── */}
+        <div className="flex sm:hidden shrink-0 overflow-x-auto border-b border-white/10 bg-slate-900/60 px-2 gap-1 py-2">
+          {[
+            { id: 'users',       icon: Users,        label: 'Usuários' },
+            { id: 'roles',       icon: Shield,       label: 'Acesso' },
+            { id: 'departments', icon: Building2,    label: 'Depto' },
+            { id: 'preferences', icon: Settings,     label: 'Prefer.' },
+            ...(isAdmin ? [{ id: 'audit', icon: ClipboardList, label: 'Auditoria' }] : []),
+          ].map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => handleTabChange(id as typeof activeTab)}
+              className={cn(
+                'shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-bold transition-all',
+                activeTab === id
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              )}
+            >
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Desktop Sidebar ── */}
+        <div className="hidden sm:flex w-56 lg:w-64 bg-slate-900/50 border-r border-white/5 p-5 flex-col pt-8 shrink-0">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-bold text-white tracking-tight">Ajustes</h2>
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-white/10 transition-colors sm:hidden">
-              <X size={20} />
-            </button>
           </div>
-
-          <div className="flex flex-col gap-2">
-            <button 
-              onClick={() => handleTabChange('users')}
-              className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'users' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
-            >
-              <Users size={18} />
-              Usuários
+          <div className="flex flex-col gap-1.5">
+            <button onClick={() => handleTabChange('users')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'users' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
+              <Users size={17} /> Usuários
             </button>
-            <button 
-              onClick={() => handleTabChange('roles')}
-              className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'roles' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
-            >
-              <Shield size={18} />
-              Níveis de Acesso
+            <button onClick={() => handleTabChange('roles')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'roles' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
+              <Shield size={17} /> Níveis de Acesso
             </button>
-            <button 
-              onClick={() => handleTabChange('departments')}
-              className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'departments' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
-            >
-              <Building2 size={18} />
-              Departamentos
+            <button onClick={() => handleTabChange('departments')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'departments' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
+              <Building2 size={17} /> Departamentos
             </button>
-            <button 
-              onClick={() => handleTabChange('preferences')}
-              className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'preferences' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
-            >
-              <Settings size={18} />
-              Preferências
+            <button onClick={() => handleTabChange('preferences')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'preferences' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
+              <Settings size={17} /> Preferências
             </button>
             {isAdmin && (
-              <button
-                onClick={() => handleTabChange('audit')}
-                className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'audit' ? "bg-blue-600 font-bold text-white shadow-md shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-white/5")}
-              >
-                <ClipboardList size={18} />
-                Auditoria
-                <span className="ml-1 px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-[10px] font-bold border border-red-500/20">Admin</span>
+              <button onClick={() => handleTabChange('audit')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'audit' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
+                <ClipboardList size={17} /> Auditoria
+                <span className="ml-auto px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full text-[9px] font-bold border border-red-500/20">Admin</span>
               </button>
             )}
           </div>
@@ -284,13 +293,13 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
 
         {/* Content Area */}
         <div className="flex-1 flex flex-col relative overflow-hidden">
-          <div className="absolute top-6 right-8 hidden sm:block z-10">
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-white/10 transition-colors bg-white/5 border border-white/10 backdrop-blur shadow-xl">
-              <X size={24} />
+          <div className="absolute top-4 right-4 hidden sm:block z-10">
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors bg-white/5 border border-white/10">
+              <X size={20} />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-10 sm:pt-20 custom-scrollbar relative">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8 lg:p-10 sm:pt-16 custom-scrollbar relative">
             <AnimatePresence mode="wait">
               {activeTab === 'users' && activeView === 'list' && (
                 <motion.div 
@@ -300,16 +309,16 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                   exit={{ opacity: 0, x: -20 }}
                   className="max-w-4xl"
                 >
-                  <div className="flex items-center justify-between mb-8">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                     <div>
-                      <h3 className="text-2xl font-bold text-white">Gerenciar Usuários</h3>
-                      <p className="text-sm text-slate-400 mt-1">Adicione ou remova membros e gerencie seus acessos.</p>
+                      <h3 className="text-lg sm:text-2xl font-bold text-white">Gerenciar Usuários</h3>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-0.5">Adicione ou remova membros e gerencie seus acessos.</p>
                     </div>
                     <button 
                       onClick={() => { resetUserForm(); setActiveView('add_user'); }}
-                      className="h-10 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/20"
+                      className="h-10 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/20 w-full sm:w-auto justify-center"
                     >
-                      <Plus size={18} /> Novo Usuário
+                      <Plus size={16} /> Novo Usuário
                     </button>
                   </div>
 
