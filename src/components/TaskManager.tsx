@@ -44,7 +44,7 @@ interface Task {
   start_date?: string;
   due_date?: string;
   completed_at?: string;
-  visibility: 'private' | 'department' | 'public';
+  visibility: 'private' | 'department' | 'public' | 'specific';
   estimated_hours?: number;
   actual_hours?: number;
   created_by?: string;
@@ -207,6 +207,17 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       
       // Visibility filter
       if (task.visibility === 'private' && task.created_by !== currentUser?.id) return false;
+      if (task.visibility === 'specific') {
+        const isCreator  = task.created_by  === currentUser?.id;
+        const isAssigned = task.assigned_to === currentUser?.id;
+        if (!isCreator && !isAssigned) return false;
+      }
+      if (task.visibility === 'department') {
+        const userDept = (currentUser as any)?.department;
+        const taskDept = task.department_data?.name;
+        const isCreator = task.created_by === currentUser?.id;
+        if (!isCreator && userDept && taskDept && userDept !== taskDept) return false;
+      }
       
       return true;
     });

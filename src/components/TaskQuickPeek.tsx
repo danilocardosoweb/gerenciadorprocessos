@@ -25,7 +25,7 @@ interface Task {
   subtasks_count?: number;
   comments_count?: number;
   created_at: string;
-  visibility: 'private' | 'department' | 'public';
+  visibility: 'private' | 'department' | 'public' | 'specific';
 }
 
 // ── Configs ────────────────────────────────────────────────────────────────
@@ -375,15 +375,19 @@ export function useQuickPeek(): UseQuickPeekReturn {
   const [modal, setModal] = useState<Task | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const dismissTooltip = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    setTooltip(null);
+  };
+
   const hoverProps = (task: Task) => ({
     onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
       const el = e.currentTarget;
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
       hoverTimer.current = setTimeout(() => setTooltip({ task, anchor: el }), 500);
     },
-    onMouseLeave: () => {
-      if (hoverTimer.current) clearTimeout(hoverTimer.current);
-      setTooltip(null);
-    },
+    onMouseLeave: dismissTooltip,
+    onMouseDown: dismissTooltip,
   });
 
   const previewButton = (task: Task) => (

@@ -5,8 +5,9 @@ import {
   X, FileText, Mail, Download, Copy, Check, ChevronDown,
   Calendar, Clock, Users, AlertCircle, CheckCircle2, Circle,
   ArrowRight, Building2, Sparkles, Printer, Eye, Edit3,
-  Flag, Zap, Target, TrendingUp, Send, Plus, CalendarPlus, Trash2, AtSign
+  Flag, Zap, Target, TrendingUp, Send, Plus, CalendarPlus, Trash2, AtSign, Image
 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { cn } from '../lib/utils';
 
 interface Task {
@@ -221,6 +222,58 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
     a.download = `ata-reuniao-${meetingDate}.html`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const [capturingImage, setCapturingImage] = useState(false);
+
+  const handleDownloadImage = async () => {
+    setCapturingImage(true);
+    try {
+      const html = getEmailHTML().replace('max-width:760px', 'max-width:1100px');
+
+      // Create a hidden iframe so the full HTML (with inline styles) renders properly
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText =
+        'position:fixed;left:-9999px;top:0;width:1122px;height:1px;border:none;visibility:hidden;';
+      document.body.appendChild(iframe);
+
+      await new Promise<void>((resolve) => {
+        iframe.onload = () => resolve();
+        iframe.contentDocument!.open();
+        iframe.contentDocument!.write(html);
+        iframe.contentDocument!.close();
+      });
+
+      // Let the browser paint all inline styles
+      await new Promise(r => setTimeout(r, 300));
+
+      const doc  = iframe.contentDocument!;
+      const body = doc.body;
+      // Expand iframe to full content height so nothing is clipped
+      const fullHeight = Math.max(body.scrollHeight, body.offsetHeight);
+      iframe.style.height = fullHeight + 'px';
+      await new Promise(r => setTimeout(r, 100));
+
+      const dataUrl = await toPng(body, {
+        cacheBust: true,
+        pixelRatio: 2,
+        width: 1122,
+        height: fullHeight,
+        backgroundColor: '#f8fafc',
+        style: { margin: '0', padding: '0' },
+      });
+
+      document.body.removeChild(iframe);
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `ata-reuniao-${meetingDate}.png`;
+      a.click();
+    } catch (err) {
+      console.error('Image export error:', err);
+    } finally {
+      setCapturingImage(false);
+    }
   };
 
   const handlePrint = () => {
@@ -678,16 +731,6 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                   <div className="px-4 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-slate-300">{meetingTitle}</div>
                 </div>
 
-                {/* Plain-text preview */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <Eye size={11} />Preview do Corpo do E-mail
-                  </label>
-                  <pre className="rounded-xl border border-white/[0.06] bg-[#0a1120] text-slate-300 text-[11px] leading-relaxed p-4 overflow-auto whitespace-pre-wrap font-mono" style={{ maxHeight: 280 }}>
-                    {getPlainTextBody()}
-                  </pre>
-                </div>
-
                 {/* Calendar invite */}
                 <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl flex items-start gap-3">
                   <CalendarPlus size={18} className="text-violet-400 mt-0.5 shrink-0" />
@@ -728,6 +771,20 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
                 <button onClick={handleDownloadHTML} title="Baixar HTML"
                   className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-semibold rounded-xl transition-colors">
                   <Download size={13} /> HTML
+                </button>
+                <button
+                  onClick={handleDownloadImage}
+                  disabled={capturingImage}
+                  title="Baixar como imagem PNG (paisagem)"
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-2 border text-xs font-semibold rounded-xl transition-all',
+                    capturingImage
+                      ? 'bg-violet-500/20 border-violet-500/40 text-violet-300 cursor-wait'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                  )}>
+                  {capturingImage
+                    ? <><div className="w-3 h-3 border-2 border-violet-400/40 border-t-violet-400 rounded-full animate-spin" /> Gerando...</>
+                    : <><Image size={13} /> Imagem</>}
                 </button>
                 <button onClick={handleCopyHTML}
                   className={cn('flex items-center gap-1.5 px-3 py-2 border text-xs font-semibold rounded-xl transition-all',

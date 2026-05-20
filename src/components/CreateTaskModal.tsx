@@ -26,7 +26,7 @@ interface CreateTaskModalProps {
 
 type TaskType = 'epic' | 'task' | 'subtask';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
-type Visibility = 'private' | 'department' | 'public';
+type Visibility = 'private' | 'department' | 'public' | 'specific';
 
 export function CreateTaskModal({ 
   isOpen, 
@@ -59,6 +59,8 @@ export function CreateTaskModal({
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
   const [processOpen, setProcessOpen] = useState(false);
+  const [specificUserOpen, setSpecificUserOpen] = useState(false);
+  const [specificUserId, setSpecificUserId] = useState<string>('');
 
   // Form state
   const [title, setTitle] = useState('');
@@ -92,6 +94,8 @@ export function CreateTaskModal({
     setPriorityOpen(false);
     setVisibilityOpen(false);
     setProcessOpen(false);
+    setSpecificUserOpen(false);
+    setSpecificUserId('');
   };
 
   const handleClose = () => {
@@ -122,6 +126,11 @@ export function CreateTaskModal({
     setIsLoading(true);
     
     try {
+      // For 'specific' visibility, the specific user becomes the assigned_to
+      const effectiveAssignedTo = visibility === 'specific'
+        ? (specificUserId || assignedTo || null)
+        : (assignedTo || null);
+
       const taskData = {
         title: title.trim(),
         description: description.trim() || null,
@@ -129,7 +138,7 @@ export function CreateTaskModal({
         status: 'todo',
         priority,
         visibility,
-        assigned_to: assignedTo || null,
+        assigned_to: effectiveAssignedTo,
         department_id: departmentId || null,
         process_item_id: processItemId || null,
         due_date: dueDate || null,
@@ -319,18 +328,31 @@ export function CreateTaskModal({
               <div className="relative">
                 <button type="button" onClick={() => { setVisibilityOpen(o => !o); setPriorityOpen(false); setDeptOpen(false); setUserOpen(false); setProcessOpen(false); }}
                   className="w-full flex items-center gap-2 px-4 py-3 bg-black/20 border border-white/10 hover:border-white/20 rounded-xl text-white transition-colors">
-                  <span className="flex-1 text-left text-sm">{visibility === 'public' ? 'Pública (todos)' : visibility === 'department' ? 'Departamento' : 'Privada (só eu)'}</span>
+                  <span className="flex-1 text-left text-sm">
+                    {visibility === 'public' ? '🌐 Pública (todos)' :
+                     visibility === 'department' ? '🏢 Departamento' :
+                     visibility === 'specific' ? '👤 Específica (1 pessoa)' :
+                     '🔒 Privada (só eu)'}
+                  </span>
                   <ChevronDown size={14} className={cn('text-slate-400 transition-transform', visibilityOpen && 'rotate-180')} />
                 </button>
                 <AnimatePresence>
                   {visibilityOpen && (
                     <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}
                       className="absolute top-full mt-1 left-0 right-0 z-30 bg-[#1e293b] border border-white/15 rounded-xl shadow-2xl overflow-hidden">
-                      {[['public','Pública (todos)'],['department','Departamento'],['private','Privada (só eu)']].map(([val, label]) => (
+                      {([
+                        ['public',     '🌐  Pública (todos)',       'Todos os usuários podem ver'],
+                        ['department', '🏢  Departamento',          'Apenas o departamento da tarefa'],
+                        ['specific',   '👤  Específica (1 pessoa)', 'Somente um usuário + você'],
+                        ['private',    '🔒  Privada (só eu)',        'Apenas você pode ver'],
+                      ] as const).map(([val, label, desc]) => (
                         <button key={val} type="button" onClick={() => { setVisibility(val as Visibility); setVisibilityOpen(false); }}
-                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', visibility === val ? 'bg-white/10 text-white' : 'text-slate-300')}>
-                          {label}
-                          {visibility === val && <Check size={13} className="ml-auto text-blue-400" />}
+                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors text-left', visibility === val ? 'bg-white/10 text-white' : 'text-slate-300')}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{label}</p>
+                            <p className="text-[10px] text-slate-500">{desc}</p>
+                          </div>
+                          {visibility === val && <Check size={13} className="text-blue-400 shrink-0" />}
                         </button>
                       ))}
                     </motion.div>
@@ -339,6 +361,62 @@ export function CreateTaskModal({
               </div>
             </div>
           </div>
+
+          {/* Specific user picker — shown only when visibility = specific */}
+          {visibility === 'specific' && (
+            <div className="space-y-2 -mt-2">
+              <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                <User size={14} className="text-violet-400" />
+                Para qual pessoa? <span className="text-red-400">*</span>
+              </label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setSpecificUserOpen(o => !o); setDeptOpen(false); setUserOpen(false); setPriorityOpen(false); setVisibilityOpen(false); setProcessOpen(false); }}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-4 py-3 bg-black/20 border rounded-xl text-white transition-colors',
+                    specificUserId ? 'border-violet-500/40 bg-violet-500/5' : 'border-white/10 hover:border-white/20'
+                  )}>
+                  {specificUserId ? (
+                    <>
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                        {(users.find(u => u.id === specificUserId)?.name || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <span className="flex-1 text-left text-sm truncate">{users.find(u => u.id === specificUserId)?.name}</span>
+                      <span className="text-[10px] text-violet-400 bg-violet-500/15 px-2 py-0.5 rounded-full">só ela + você</span>
+                    </>
+                  ) : (
+                    <span className="flex-1 text-left text-sm text-slate-500">Selecione o usuário...</span>
+                  )}
+                  <ChevronDown size={14} className={cn('text-slate-400 transition-transform shrink-0', specificUserOpen && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {specificUserOpen && (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}
+                      className="absolute top-full mt-1 left-0 right-0 z-30 bg-[#1e293b] border border-white/15 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto">
+                      {users.filter(u => u.id !== currentUser?.id).map(u => (
+                        <button key={u.id} type="button" onClick={() => { setSpecificUserId(u.id); setSpecificUserOpen(false); }}
+                          className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/8 transition-colors', specificUserId === u.id ? 'bg-white/10 text-white' : 'text-slate-300')}>
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="text-left flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{u.name}</p>
+                            <p className="text-[10px] text-slate-500">{u.role}</p>
+                          </div>
+                          {specificUserId === u.id && <Check size={13} className="ml-auto text-violet-400 shrink-0" />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+                Apenas <strong className="text-slate-400">{users.find(u => u.id === specificUserId)?.name || 'essa pessoa'}</strong> e você ({currentUser?.name}) poderão ver esta tarefa.
+              </p>
+            </div>
+          )}
 
           {/* Department & Assignment Row */}
           <div className="grid grid-cols-2 gap-4">
