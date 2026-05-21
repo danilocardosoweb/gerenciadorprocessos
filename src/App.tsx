@@ -27,6 +27,8 @@ import { Dashboard } from './components/Dashboard';
 import { MarkdownView } from './components/MarkdownView';
 import { Sector3DView } from './components/Sector3DView';
 import { nodeDetailsSeed } from './data/nodeDetails';
+import { tramontinaNodeDetails } from './data/nodeDetailsTramontina';
+import { corteSerrasNodeDetails } from './data/nodeDetailsCorteSerras';
 import { Login } from './components/Login';
 import { usePreferences } from './hooks/usePreferences';
 import { useAuditLog } from './hooks/useAuditLog';
@@ -50,6 +52,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
   
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
+  
   const [selectedNodeData, setSelectedNodeData] = useState<any | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -156,6 +159,255 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
   const tooltipPos = getTooltipPosition();
 
   const [nodeDetailsMap, setNodeDetailsMap] = useState<Record<string, NodeDetails>>(nodeDetailsSeed);
+  
+  // Load nodes and edges from Supabase when mapId changes
+  useEffect(() => {
+    if (!mapId) return;
+    
+    const loadMapData = async () => {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data, error } = await supabase
+          .from('process_items')
+          .select('nodes, edges, title, node_details')
+          .eq('id', mapId)
+          .single();
+        
+        if (error) {
+          console.error('Error loading map data:', error);
+          return;
+        }
+        
+        if (data?.nodes && data?.edges) {
+          // Apply layout to loaded nodes and edges
+          const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+            data.nodes,
+            data.edges,
+            'LR'
+          );
+          setNodes(layoutedNodes);
+          setEdges(layoutedEdges);
+          console.log('Map data loaded from database:', data.nodes.length, 'nodes,', data.edges.length, 'edges');
+          
+          // Load saved node_details from database if exists
+          if (data.node_details) {
+            setNodeDetailsMap((prev) => ({
+              ...prev,
+              ...data.node_details
+            }));
+            console.log('Node details loaded from database:', Object.keys(data.node_details).length, 'nodes');
+          }
+          
+          // If this is the Tramontina map, integrate the detailed descriptions
+          if (data.title?.toLowerCase().includes('tramontina') || mapTitle?.toLowerCase().includes('tramontina')) {
+            console.log('Detected Tramontina map - integrating detailed node descriptions...');
+            
+            // Create a mapping of normalized labels to details for fuzzy matching
+            const labelToDetailsMap: Record<string, NodeDetails> = {};
+            tramontinaNodeDetails.forEach(detail => {
+              // Normalize the label for matching (lowercase, remove special chars)
+              const normalizedLabel = detail.id.toLowerCase().replace(/[^a-z0-9]/g, '');
+              labelToDetailsMap[normalizedLabel] = {
+                description: detail.description,
+                images: [],
+                tasks: detail.actions.map((action, index) => ({
+                  id: `task-${detail.id}-${index}`,
+                  text: action,
+                  completed: false
+                }))
+              };
+            });
+            
+            // Match nodes by their label/content
+            const matchedDetails: Record<string, NodeDetails> = {};
+            let matchCount = 0;
+            
+            data.nodes.forEach((node: any) => {
+              const nodeLabel = (node.data?.label || '').toLowerCase();
+              const normalizedNodeLabel = nodeLabel.replace(/[^a-z0-9]/g, '');
+              
+              // Try exact match first
+              let matchedDetail: NodeDetails | null = null;
+              let matchedId: string | null = null;
+              
+              // Check if any tramontina detail ID matches part of the node label
+              for (const [detailId, detail] of Object.entries(labelToDetailsMap)) {
+                if (normalizedNodeLabel.includes(detailId) || detailId.includes(normalizedNodeLabel.substring(0, 10))) {
+                  matchedDetail = detail;
+                  matchedId = detailId;
+                  break;
+                }
+              }
+              
+              // Also try matching by keywords in the label
+              if (!matchedDetail) {
+                // Keyword matching for specific sections
+                if (nodeLabel.includes('pallet') && nodeLabel.includes('integridade')) {
+                  matchedDetail = labelToDetailsMap['e1integridade'];
+                } else if (nodeLabel.includes('pallet') && nodeLabel.includes('limpo')) {
+                  matchedDetail = labelToDetailsMap['e1limpo'];
+                } else if (nodeLabel.includes('código') || nodeLabel.includes('codigo')) {
+                  matchedDetail = labelToDetailsMap['e2codigo'];
+                } else if (nodeLabel.includes('lote')) {
+                  matchedDetail = labelToDetailsMap['e2lote'];
+                } else if (nodeLabel.includes('comprimento') || nodeLabel.includes('medida')) {
+                  matchedDetail = labelToDetailsMap['e2comprimento'];
+                } else if (nodeLabel.includes('pedido')) {
+                  matchedDetail = labelToDetailsMap['e2pedido'];
+                } else if (nodeLabel.includes('alinhar') || nodeLabel.includes('alinhamento')) {
+                  matchedDetail = labelToDetailsMap['e3alinhar'];
+                } else if (nodeLabel.includes('peso') && nodeLabel.includes('uniforme')) {
+                  matchedDetail = labelToDetailsMap['e3peso'];
+                } else if (nodeLabel.includes('laterais') || nodeLabel.includes('sarrafos')) {
+                  matchedDetail = labelToDetailsMap['e4laterais'];
+                } else if (nodeLabel.includes('travessas')) {
+                  matchedDetail = labelToDetailsMap['e4travessas'];
+                } else if (nodeLabel.includes('fita') || nodeLabel.includes('pet')) {
+                  matchedDetail = labelToDetailsMap['e5verticais'];
+                } else if (nodeLabel.includes('stretch')) {
+                  matchedDetail = labelToDetailsMap['e6base'];
+                } else if (nodeLabel.includes('tela') || nodeLabel.includes('frontal')) {
+                  matchedDetail = labelToDetailsMap['e7tela'];
+                } else if (nodeLabel.includes('etiqueta') && nodeLabel.includes('visível')) {
+                  matchedDetail = labelToDetailsMap['e8etiqueta'];
+                } else if (nodeLabel.includes('inspeção') || nodeLabel.includes('final')) {
+                  matchedDetail = labelToDetailsMap['e9alinhados'];
+                } else if (nodeLabel.includes('iatf') || nodeLabel.includes('controle')) {
+                  matchedDetail = labelToDetailsMap['iatfrastreabilidade'];
+                } else if (nodeLabel.includes('segurança') || nodeLabel.includes('epi')) {
+                  matchedDetail = labelToDetailsMap['segoculos'];
+                }
+              }
+              
+              if (matchedDetail && node.id) {
+                matchedDetails[node.id] = matchedDetail;
+                matchCount++;
+              }
+            });
+            
+            console.log(`Matched ${matchCount} nodes with detailed descriptions`);
+            
+            // Merge with existing nodeDetailsMap
+            setNodeDetailsMap(prev => ({
+              ...prev,
+              ...matchedDetails
+            }));
+            
+            if (matchCount > 0) {
+              console.log(`Successfully integrated ${matchCount} detailed node descriptions`);
+            } else {
+              console.log('No matches found. Node labels:', data.nodes.map((n: any) => n.data?.label).slice(0, 10));
+            }
+          }
+          
+          // If this is the Corte em Serras map, integrate the detailed descriptions
+          if (data.title?.toLowerCase().includes('corte') || data.title?.toLowerCase().includes('serra') || 
+              mapTitle?.toLowerCase().includes('corte') || mapTitle?.toLowerCase().includes('serra')) {
+            console.log('Detected Corte em Serras map - integrating detailed node descriptions...');
+            
+            // Create a mapping of normalized labels to details for fuzzy matching
+            const corteLabelToDetailsMap: Record<string, NodeDetails> = {};
+            corteSerrasNodeDetails.forEach(detail => {
+              // Normalize the label for matching (lowercase, remove special chars)
+              const normalizedLabel = detail.id.toLowerCase().replace(/[^a-z0-9]/g, '');
+              corteLabelToDetailsMap[normalizedLabel] = {
+                description: detail.description,
+                images: [],
+                tasks: detail.actions.map((action, index) => ({
+                  id: `task-${detail.id}-${index}`,
+                  text: action,
+                  completed: false
+                }))
+              };
+            });
+            
+            // Match nodes by their label/content
+            const corteMatchedDetails: Record<string, NodeDetails> = {};
+            let corteMatchCount = 0;
+            
+            data.nodes.forEach((node: any) => {
+              const nodeLabel = (node.data?.label || '').toLowerCase();
+              const normalizedNodeLabel = nodeLabel.replace(/[^a-z0-9]/g, '');
+              
+              // Try exact match first
+              let matchedDetail: NodeDetails | null = null;
+              
+              // Check if any corte detail ID matches part of the node label
+              for (const [detailId, detail] of Object.entries(corteLabelToDetailsMap)) {
+                if (normalizedNodeLabel.includes(detailId) || detailId.includes(normalizedNodeLabel.substring(0, 10))) {
+                  matchedDetail = detail;
+                  break;
+                }
+              }
+              
+              // Also try matching by keywords in the label
+              if (!matchedDetail) {
+                // Keyword matching for specific sections
+                if (nodeLabel.includes('material') && (nodeLabel.includes('receb') || nodeLabel.includes('confer'))) {
+                  matchedDetail = corteLabelToDetailsMap['inmaterial'];
+                } else if (nodeLabel.includes('op') || nodeLabel.includes('ordem') || nodeLabel.includes('produção')) {
+                  matchedDetail = corteLabelToDetailsMap['inop'];
+                } else if (nodeLabel.includes('desenho') || nodeLabel.includes('técnico')) {
+                  matchedDetail = corteLabelToDetailsMap['indesenho'];
+                } else if (nodeLabel.includes('lâmina') || nodeLabel.includes('lamina')) {
+                  matchedDetail = corteLabelToDetailsMap['e1lamina'];
+                } else if (nodeLabel.includes('coolant') || nodeLabel.includes('lubrif') || nodeLabel.includes('refrigeração')) {
+                  matchedDetail = corteLabelToDetailsMap['e1coolant'];
+                } else if (nodeLabel.includes('calibra') || nodeLabel.includes('setup') || nodeLabel.includes('stop')) {
+                  matchedDetail = corteLabelToDetailsMap['e1calibracao'];
+                } else if (nodeLabel.includes('limpeza') && nodeLabel.includes('máquina')) {
+                  matchedDetail = corteLabelToDetailsMap['e1limp'];
+                } else if (nodeLabel.includes('peça piloto') || nodeLabel.includes('primeira peça')) {
+                  matchedDetail = corteLabelToDetailsMap['e2primeirapeca'];
+                } else if (nodeLabel.includes('medir') || nodeLabel.includes('dimensional') || nodeLabel.includes('paquímetro')) {
+                  matchedDetail = corteLabelToDetailsMap['e3medicaodimensional'];
+                } else if (nodeLabel.includes('visual') || nodeLabel.includes('inspeção') && nodeLabel.includes('rebarba')) {
+                  matchedDetail = corteLabelToDetailsMap['e3inspevisual'];
+                } else if (nodeLabel.includes('tolerância') || nodeLabel.includes('tolerancia')) {
+                  matchedDetail = corteLabelToDetailsMap['e3tolerancias'];
+                } else if (nodeLabel.includes('aprovação') || nodeLabel.includes('liberação')) {
+                  matchedDetail = corteLabelToDetailsMap['e3aprovacao'];
+                } else if (nodeLabel.includes('desbarbar') || nodeLabel.includes('rebarba')) {
+                  matchedDetail = corteLabelToDetailsMap['e6desbarbar'];
+                } else if (nodeLabel.includes('epi') || nodeLabel.includes('segurança') || nodeLabel.includes('óculos')) {
+                  matchedDetail = corteLabelToDetailsMap['segepi'];
+                } else if (nodeLabel.includes('rastreabilidade') || nodeLabel.includes('lote')) {
+                  matchedDetail = corteLabelToDetailsMap['iatfrastreabilidade'];
+                } else if (nodeLabel.includes('cpk') || nodeLabel.includes('capacidade')) {
+                  matchedDetail = corteLabelToDetailsMap['kpicpk'];
+                } else if (nodeLabel.includes('scrap') || nodeLabel.includes('refugo')) {
+                  matchedDetail = corteLabelToDetailsMap['kpiscrap'];
+                }
+              }
+              
+              if (matchedDetail && node.id) {
+                corteMatchedDetails[node.id] = matchedDetail;
+                corteMatchCount++;
+              }
+            });
+            
+            console.log(`Matched ${corteMatchCount} Corte em Serras nodes with detailed descriptions`);
+            
+            // Merge with existing nodeDetailsMap
+            setNodeDetailsMap(prev => ({
+              ...prev,
+              ...corteMatchedDetails
+            }));
+            
+            if (corteMatchCount > 0) {
+              console.log(`Successfully integrated ${corteMatchCount} Corte em Serras detailed node descriptions`);
+            } else {
+              console.log('No Corte matches found. Node labels:', data.nodes.map((n: any) => n.data?.label).slice(0, 10));
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading map:', err);
+      }
+    };
+    
+    loadMapData();
+  }, [mapId, mapTitle, setNodes, setEdges, setNodeDetailsMap]);
 
   // Version History
   const { versions, saveVersion, restoreVersion, deleteVersion, clearAllVersions, exportVersions, totalCount: versionCount } = useVersionHistory(mapId);
@@ -329,9 +581,69 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
     setSelectedNodeData(null);
   }, []);
 
-  const handleUpdateDetails = useCallback((id: string, newDetails: NodeDetails) => {
-    setNodeDetailsMap((prev) => ({ ...prev, [id]: newDetails }));
-  }, []);
+  const handleUpdateDetails = useCallback(async (id: string, newDetails: NodeDetails | ((prev: NodeDetails) => NodeDetails)) => {
+    // Get the actual new details (handle both direct values and functional updates)
+    const resolvedDetails = typeof newDetails === 'function' 
+      ? newDetails(nodeDetailsMap[id] || { description: '', images: [], tasks: [] })
+      : newDetails;
+    
+    // Update local state first
+    setNodeDetailsMap((prev) => ({ ...prev, [id]: resolvedDetails }));
+    
+    // Save to database
+    if (mapId) {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        
+        // Get current node_details from database
+        const { data: currentData, error: fetchError } = await supabase
+          .from('process_items')
+          .select('node_details')
+          .eq('id', mapId)
+          .single();
+        
+        if (fetchError) {
+          console.error('Error fetching current node_details:', fetchError);
+          return;
+        }
+        
+        // Merge with existing node_details
+        const existingDetails = currentData?.node_details || {};
+        const updatedDetails = {
+          ...existingDetails,
+          [id]: resolvedDetails
+        };
+        
+        // Save back to database
+        const { error: updateError } = await supabase
+          .from('process_items')
+          .update({ node_details: updatedDetails })
+          .eq('id', mapId);
+        
+        if (updateError) {
+          console.error('Error saving node_details:', updateError);
+        } else {
+          console.log('Node details saved successfully for node:', id);
+        }
+      } catch (err) {
+        console.error('Error in handleUpdateDetails:', err);
+      }
+    }
+  }, [mapId, nodeDetailsMap]);
+
+  const handleUpdateNodeLabel = useCallback((id: string, newLabel: string) => {
+    setNodes((prevNodes) =>
+      prevNodes.map((node) =>
+        node.id === id
+          ? { ...node, data: { ...node.data, label: newLabel } }
+          : node
+      )
+    );
+    // Also update selectedNodeData if it's the current node
+    if (selectedNodeId === id && selectedNodeData) {
+      setSelectedNodeData({ ...selectedNodeData, label: newLabel });
+    }
+  }, [selectedNodeId, selectedNodeData, setNodes]);
 
   const handleAddNodeSafe = useCallback((data: { label: string; category: string; requiredIATF: string; parentId: string }) => {
     const newNodeId = `node-${Date.now()}`;
@@ -1020,6 +1332,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
         nodeId={selectedNodeId || ''}
         details={getCurrentNodeDetails()}
         onUpdateDetails={handleUpdateDetails}
+        onUpdateNodeLabel={handleUpdateNodeLabel}
         currentUser={currentUser}
       />
 

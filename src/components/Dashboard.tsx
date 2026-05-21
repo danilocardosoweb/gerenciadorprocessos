@@ -344,6 +344,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
       allowed_departments: data.allowed_departments,
       allowed_user_ids: data.allowed_user_ids,
       created_by: currentUser?.id ?? null,
+      nodes: data.nodes || null,
+      edges: data.edges || null,
     }).select().single();
 
     if (error) {

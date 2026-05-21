@@ -633,7 +633,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
         ) : viewMode === 'kanban' ? (
           // Kanban View
           <div className="h-full overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
-            <div className="flex gap-3 p-5 h-full">
+            <div className="flex gap-4 p-5 h-full min-w-max lg:min-w-0 lg:grid lg:grid-cols-6 lg:gap-3">
               {Object.entries(kanbanColumns).map(([status, columnTasks]) => {
                 const config = statusConfig[status as Task['status']];
                 const isDragTarget = dragOverColumn === status && draggedTaskId;
@@ -641,7 +641,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
                   <div
                     key={status}
                     className={cn(
-                      'w-[82vw] xs:w-72 flex-shrink-0 flex flex-col rounded-2xl transition-all duration-200 border',
+                      'w-[280px] sm:w-[320px] lg:w-full flex-shrink-0 flex flex-col rounded-2xl transition-all duration-200 border',
                       isDragTarget
                         ? 'bg-blue-500/5 border-blue-500/30 ring-1 ring-blue-500/20'
                         : 'bg-[#0d1628] border-white/[0.05]'

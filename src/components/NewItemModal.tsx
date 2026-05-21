@@ -14,6 +14,8 @@ export interface NewItemData {
   visibility: Visibility;
   allowed_departments: string[];
   allowed_user_ids: string[];
+  nodes?: any[];
+  edges?: any[];
 }
 
 interface NewItemModalProps {

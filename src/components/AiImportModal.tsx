@@ -1,17 +1,22 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, UploadCloud, FileText, File as FileArchive, Image as ImageIcon, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { X, UploadCloud, FileText, File as FileArchive, Image as ImageIcon, Sparkles, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { generateMindMapFromText, extractTextFromFile, GeneratedMap, generateCorteSerrasMindMap } from '../services/geminiService';
 
 interface AiImportModalProps {
   onClose: () => void;
-  onImport: (data: { title: string; description: string; type: 'map' }) => void;
+  onImport: (data: { title: string; description: string; type: 'map', nodes?: any[], edges?: any[] }) => void;
 }
 
 export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [analyzingState, setAnalyzingState] = useState<'idle' | 'uploading' | 'analyzing' | 'generating' | 'done'>('idle');
+  const [pastedText, setPastedText] = useState<string>('');
+  const [inputMethod, setInputMethod] = useState<'file' | 'paste'>('file');
+  const [analyzingState, setAnalyzingState] = useState<'idle' | 'uploading' | 'analyzing' | 'generating' | 'done' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [generatedMap, setGeneratedMap] = useState<GeneratedMap | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -38,34 +43,76 @@ export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
     }
   };
 
-  const processFile = (f: File) => {
-    setFile(f);
-    simulateAIProcess();
-  };
+  const processFile = async (f?: File, text?: string) => {
+    if (text) {
+      setFile(null);
+      setAnalyzingState('uploading');
+      setErrorMessage('');
+      setGeneratedMap(null);
 
-  const simulateAIProcess = () => {
-    setAnalyzingState('uploading');
-    
-    setTimeout(() => {
-      setAnalyzingState('analyzing');
-      
-      setTimeout(() => {
-        setAnalyzingState('generating');
-        
-        setTimeout(() => {
-          setAnalyzingState('done');
-        }, 2500);
-      }, 3000);
-    }, 1500);
+      try {
+        setAnalyzingState('analyzing');
+        const map = await generateMindMapFromText(text, 'Texto colado');
+        setGeneratedMap(map);
+        setAnalyzingState('done');
+      } catch (error) {
+        console.error('Error processing text:', error);
+        setErrorMessage(error instanceof Error ? error.message : 'Erro ao processar texto');
+        setAnalyzingState('error');
+      }
+      return;
+    }
+
+    if (f) {
+      setFile(f);
+      setAnalyzingState('uploading');
+      setErrorMessage('');
+      setGeneratedMap(null);
+
+      try {
+        const extractedText = await extractTextFromFile(f);
+        setAnalyzingState('analyzing');
+        const map = await generateMindMapFromText(extractedText, f.name);
+        setGeneratedMap(map);
+        setAnalyzingState('done');
+      } catch (error) {
+        console.error('Error processing file:', error);
+        setErrorMessage(error instanceof Error ? error.message : 'Erro ao processar arquivo');
+        setAnalyzingState('error');
+      }
+    }
   };
 
   const handleFinish = () => {
+    if (!generatedMap) return;
+
     onImport({
-      title: file ? `Mapa Gerado: ${file.name.split('.')[0]}` : 'Mapa Gerado por IA',
+      title: generatedMap.title || (file ? `Mapa Gerado: ${file.name.split('.')[0]}` : pastedText ? 'Mapa Gerado: Texto Colado' : 'Mapa Gerado por IA'),
       description: 'Mapa de processos extraído automaticamente do documento através da nossa inteligência artificial.',
-      type: 'map'
+      type: 'map',
+      nodes: generatedMap.nodes,
+      edges: generatedMap.edges
     });
     onClose();
+  };
+
+  const handlePasteSubmit = () => {
+    if (!pastedText.trim()) return;
+    processFile(undefined, pastedText);
+  };
+
+  const handleGenerateCorteSerras = async () => {
+    setAnalyzingState('generating');
+    setErrorMessage('');
+    
+    try {
+      const generatedMap = await generateCorteSerrasMindMap();
+      setGeneratedMap(generatedMap);
+      setAnalyzingState('done');
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Erro ao gerar mapa de Corte em Serras');
+      setAnalyzingState('error');
+    }
   };
 
   return (
@@ -98,10 +145,49 @@ export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
             </div>
             <h2 className="text-2xl font-bold text-white">IA Process Import</h2>
           </div>
-          <p className="text-slate-400 text-sm mb-8">Faça upload de um manual em PDF ou Word. Nossa IA vai analisar o documento e estruturar um mapa de processo automaticamente.</p>
+          <p className="text-slate-400 text-sm mb-4">Faça upload de um manual em PDF ou Word ou cole o texto diretamente. Nossa IA vai analisar e estruturar um mapa de processo automaticamente.</p>
+
+          {/* Template Presets */}
+          <div className="mb-6 p-4 bg-gradient-to-r from-orange-500/10 to-red-500/10 border border-orange-500/20 rounded-2xl">
+            <h3 className="text-sm font-semibold text-orange-300 mb-3 flex items-center gap-2">
+              <Sparkles size={16} />
+              Mapas Pré-definidos (Templates)
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleGenerateCorteSerras}
+                disabled={analyzingState === 'generating'}
+                className="px-4 py-2 bg-orange-600/80 hover:bg-orange-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2"
+              >
+                <FileArchive size={14} />
+                Operação de Corte em Serras
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              Clique acima para criar um mapa completo de corte em serras com foco em qualidade, inspeção e medições.
+            </p>
+          </div>
+
+          <div className="h-px bg-white/10 mb-6" />
+
+          {/* Input method toggle */}
+          <div className="flex gap-2 mb-6 bg-white/5 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => setInputMethod('file')}
+              className={cn('px-4 py-2 rounded-lg text-sm font-semibold transition-all', inputMethod === 'file' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white')}
+            >
+              Upload de Arquivo
+            </button>
+            <button
+              onClick={() => setInputMethod('paste')}
+              className={cn('px-4 py-2 rounded-lg text-sm font-semibold transition-all', inputMethod === 'paste' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white')}
+            >
+              Colar Texto
+            </button>
+          </div>
 
           <AnimatePresence mode="wait">
-            {analyzingState === 'idle' && (
+            {analyzingState === 'idle' && inputMethod === 'file' && (
               <motion.div
                 key="upload"
                 initial={{ opacity: 0, y: 10 }}
@@ -145,7 +231,69 @@ export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
               </motion.div>
             )}
 
-            {analyzingState !== 'idle' && (
+            {analyzingState === 'idle' && inputMethod === 'paste' && (
+              <motion.div
+                key="paste"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="bg-white/[0.02] border border-white/10 rounded-3xl p-6"
+              >
+                <label className="text-sm font-medium text-slate-300 mb-3 block">
+                  Cole o texto do documento aqui
+                </label>
+                <textarea
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  placeholder="Cole o conteúdo do seu documento (PDF, Word, etc.) aqui..."
+                  rows={12}
+                  className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none text-sm leading-relaxed"
+                />
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={handlePasteSubmit}
+                    disabled={!pastedText.trim()}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Sparkles size={14} />
+                    Gerar Mapa com IA
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {analyzingState === 'error' && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-red-500/10 border border-red-500/20 rounded-3xl p-8"
+              >
+                <div className="flex flex-col items-center justify-center text-center">
+                  <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+                    <AlertCircle size={32} className="text-red-400" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Erro ao processar arquivo</h3>
+                  <p className="text-sm text-slate-300 mb-6 max-w-md">{errorMessage}</p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setAnalyzingState('idle')}
+                      className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-semibold transition-colors"
+                    >
+                      Tentar novamente
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="px-6 py-2.5 text-slate-400 hover:text-white rounded-xl transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {analyzingState !== 'idle' && analyzingState !== 'error' && (
               <motion.div
                 key="analyzing"
                 initial={{ opacity: 0, scale: 0.95 }}
