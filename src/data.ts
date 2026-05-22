@@ -1,5 +1,13 @@
 import { Node, Edge } from '@xyflow/react';
 
+// Empty template for new maps (only a root node)
+export const emptyMapTemplate = {
+  nodes: [
+    { id: 'root', type: 'mindmap', position: { x: 0, y: 0 }, data: { label: 'Novo Processo', nodeType: 'root', category: 'root', numberCode: '1.0' } }
+  ] as Node[],
+  edges: [] as Edge[]
+};
+
 export const initialNodes: Node[] = [
   // ROOT
   { id: 'root', type: 'mindmap', position: { x: 0, y: 0 }, data: { label: 'Processo Principal', nodeType: 'root', category: 'root', numberCode: '1.0' } },

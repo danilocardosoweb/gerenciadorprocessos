@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Network, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
+import backgroundImage from '../assets/Fundo2.png';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => boolean | Promise<boolean>;
@@ -64,6 +65,12 @@ export function Login({ onLogin, onClose }: LoginProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0f172a]">
+      {/* Background Image */}
+      <div 
+        className="absolute inset-0 bg-contain bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${backgroundImage})` }}
+      />
+      
       {/* Background Effects */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[140px] pointer-events-none" />
@@ -74,19 +81,8 @@ export function Login({ onLogin, onClose }: LoginProps) {
         transition={{ duration: 0.5 }}
         className="relative w-full max-w-md"
       >
-        {/* Logo & Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-4 shadow-lg shadow-blue-500/30">
-            <Network size={32} className="text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Tecno <span className="text-blue-400 font-light">Mapper</span>
-          </h1>
-          <p className="text-slate-400">Gerenciamento de Processos Industriais</p>
-        </div>
-
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+        <form onSubmit={handleSubmit} className="backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
@@ -169,12 +165,6 @@ export function Login({ onLogin, onClose }: LoginProps) {
             )}
           </button>
         </form>
-
-        {/* Footer */}
-        <p className="mt-8 text-center text-sm text-slate-500">
-          Sistema interno de gestão de processos. <br />
-          Acesso restrito a colaboradores autorizados.
-        </p>
       </motion.div>
 
       {/* Forgot Password Modal */}

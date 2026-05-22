@@ -8,7 +8,7 @@ import {
   MessageSquare, LayoutGrid, List, Kanban, X, Trash2,
   Edit2, Save, CheckSquare, GripVertical, Flag, Building2,
   Link2, Bell, BellRing, Send, AtSign, Check, Pencil, FileText,
-  ChevronRight as ChevronRightIcon
+  ChevronRight as ChevronRightIcon, CheckCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -16,6 +16,7 @@ import { ProcessItem } from './Dashboard';
 import { CreateTaskModal } from './CreateTaskModal';
 import { ConfirmModal } from './ConfirmModal';
 import { MeetingMinutesModal } from './MeetingMinutesModal';
+import { ApprovalModal } from './ApprovalModal';
 import { usePermissions } from '../lib/permissions';
 import { useQuickPeek } from './TaskQuickPeek';
 
@@ -62,6 +63,7 @@ interface TaskManagerProps {
   currentUser: { id: string; name: string; email: string; role: string } | null;
   processItems?: ProcessItem[];
   department?: string;
+  addLog?: (entry: Omit<any, 'id' | 'timestamp'>) => void;
 }
 
 type ViewMode = 'kanban' | 'list' | 'calendar';
@@ -83,7 +85,7 @@ const priorityConfig = {
   urgent: { label: 'Urgente', color: 'text-red-400',   bg: 'bg-red-500/10',   bar: 'bg-red-500',    chip: 'bg-red-500/10   text-red-400   border-red-500/20'   },
 };
 
-export function TaskManager({ currentUser, processItems, department }: TaskManagerProps) {
+export function TaskManager({ currentUser, processItems, department, addLog }: TaskManagerProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -98,6 +100,8 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [approvalTask, setApprovalTask] = useState<Task | null>(null);
+  const [isApprovalLoading, setIsApprovalLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ taskId: string; title: string } | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [detailTab, setDetailTab] = useState<'details' | 'comments' | 'alerts'>('details');
@@ -327,6 +331,72 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       });
   };
 
+  const handleApproveTask = async (comment: string) => {
+    if (!approvalTask) return;
+    
+    // Check if user has permission to approve
+    const canApprove = perms.can.approveTask;
+    if (!canApprove) {
+      alert('Você não tem permissão para aprovar tarefas.');
+      return;
+    }
+
+    setIsApprovalLoading(true);
+
+    try {
+      const updates: any = { status: 'done', completed_at: new Date().toISOString() };
+      const { error } = await supabase.from('tasks').update(updates).eq('id', approvalTask.id);
+      if (error) throw error;
+
+      setTasks(prev => prev.map(t => t.id === approvalTask.id ? { ...t, ...updates } : t));
+      setApprovalTask(null);
+
+      if (addLog) {
+        addLog({
+          userName: currentUser?.name || 'Desconhecido',
+          userEmail: currentUser?.email || '-',
+          userRole: currentUser?.role || '-',
+          action: 'Aprovar Tarefa',
+          details: `Tarefa "${approvalTask.title}" aprovada${comment ? `: ${comment}` : ''}`,
+          category: 'data'
+        });
+      }
+    } catch (err) {
+      console.error('Error approving task:', err);
+    } finally {
+      setIsApprovalLoading(false);
+    }
+  };
+
+  const handleRejectTask = async (comment: string) => {
+    if (!approvalTask) return;
+    setIsApprovalLoading(true);
+
+    try {
+      const updates: any = { status: 'todo' };
+      const { error } = await supabase.from('tasks').update(updates).eq('id', approvalTask.id);
+      if (error) throw error;
+
+      setTasks(prev => prev.map(t => t.id === approvalTask.id ? { ...t, ...updates } : t));
+      setApprovalTask(null);
+
+      if (addLog) {
+        addLog({
+          userName: currentUser?.name || 'Desconhecido',
+          userEmail: currentUser?.email || '-',
+          userRole: currentUser?.role || '-',
+          action: 'Rejeitar Tarefa',
+          details: `Tarefa "${approvalTask.title}" rejeitada${comment ? `: ${comment}` : ''}`,
+          category: 'data'
+        });
+      }
+    } catch (err) {
+      console.error('Error rejecting task:', err);
+    } finally {
+      setIsApprovalLoading(false);
+    }
+  };
+
   const statusOrder = ['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled'] as Task['status'][];
 
   const getPrevNextStatus = (current: Task['status']) => {
@@ -480,6 +550,15 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
 
           <div className="flex items-center gap-1 shrink-0">
             {previewButton(task)}
+            {task.status === 'review' && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setApprovalTask(task); }}
+                className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-600 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+                title="Aprovar/Rejeitar"
+              >
+                <CheckCircle size={12} />
+              </button>
+            )}
             {canDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id, task.title); }}
@@ -795,6 +874,15 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
         onClose={() => setMinutesOpen(false)}
         tasks={tasks}
         currentUser={currentUser}
+      />
+
+      <ApprovalModal
+        isOpen={!!approvalTask}
+        onClose={() => setApprovalTask(null)}
+        taskTitle={approvalTask?.title || ''}
+        onApprove={handleApproveTask}
+        onReject={handleRejectTask}
+        loading={isApprovalLoading}
       />
 
       {/* Create Task Modal */}
