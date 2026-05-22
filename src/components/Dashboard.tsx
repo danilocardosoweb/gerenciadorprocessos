@@ -1096,6 +1096,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             onCreate={handleCreateItem}
             initialType={modalInitialType}
             currentUser={currentUser ?? undefined}
+            isOpen={isNewItemOpen}
           />
         )}
         

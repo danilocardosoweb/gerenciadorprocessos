@@ -318,6 +318,7 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
             currentUser={currentUser}
             users={users}
             departments={departments}
+            isOpen={isModalOpen}
           />
         )}
       </AnimatePresence>

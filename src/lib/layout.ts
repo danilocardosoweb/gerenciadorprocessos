@@ -53,8 +53,8 @@ function getHierarchicalLayout(nodes: Node[], edges: Edge[]) {
   if (roots.length === 0) return nodes;
   
   const layoutNodes = new Map<string, Node>();
-  const levelWidth = 450;   // Horizontal space between levels
-  const siblingGap = 150;   // Vertical space between siblings
+  const levelWidth = 300;   // Horizontal space between levels
+  const siblingGap = 100;   // Vertical space between siblings
   
   function positionNode(node: any, level: number, parentY: number) {
     const children = node.children || [];
@@ -116,11 +116,11 @@ function getHierarchicalLayout(nodes: Node[], edges: Edge[]) {
 function getDagreLayout(nodes: Node[], edges: Edge[], direction = 'LR') {
   dagreGraph.setGraph({ 
     rankdir: direction, 
-    nodesep: 120,    
-    ranksep: 150,    
+    nodesep: 80,    
+    ranksep: 100,    
     ranker: 'longest-path',
-    marginx: 50,
-    marginy: 50
+    marginx: 30,
+    marginy: 30
   });
 
   // Sort nodes by numberCode before adding to graph

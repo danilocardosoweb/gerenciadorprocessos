@@ -82,7 +82,7 @@ export function Login({ onLogin, onClose }: LoginProps) {
         className="relative w-full max-w-md"
       >
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+        <form onSubmit={handleSubmit} className="bg-black/10 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}

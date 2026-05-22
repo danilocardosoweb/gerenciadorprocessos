@@ -23,9 +23,10 @@ interface NewItemModalProps {
   onCreate: (data: NewItemData) => void;
   initialType?: 'map' | 'folder' | 'markdown' | 'sector3d';
   currentUser?: { id: string; name: string; email: string; role: string } | null;
+  isOpen?: boolean;
 }
 
-export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUser }: NewItemModalProps) {
+export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUser, isOpen }: NewItemModalProps) {
   const [type, setType] = useState<'map' | 'folder' | 'markdown' | 'sector3d'>(initialType);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -41,15 +42,23 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
   const [userDropOpen, setUserDropOpen] = useState(false);
 
   useEffect(() => {
-    supabase.from('departments').select('*').order('created_at', { ascending: true }).then(({ data, error }) => {
-      if (error) console.error('❌ Error fetching departments:', error);
-      if (data) setAllDepartments(data);
-    });
-    supabase.from('tecno_users').select('*').eq('status', 'Ativo').order('created_at', { ascending: true }).then(({ data, error }) => {
-      if (error) console.error('❌ Error fetching users:', error);
-      if (data) setAllUsers(data.filter(u => u.id !== currentUser?.id));
-    });
-  }, [currentUser?.id]);
+    const fetchDepartments = () => {
+      supabase.from('departments').select('*').order('created_at', { ascending: true }).then(({ data, error }) => {
+        if (error) console.error('❌ Error fetching departments:', error);
+        if (data) setAllDepartments(data);
+      });
+    };
+    
+    const fetchUsers = () => {
+      supabase.from('tecno_users').select('*').eq('status', 'Ativo').order('created_at', { ascending: true }).then(({ data, error }) => {
+        if (error) console.error('❌ Error fetching users:', error);
+        if (data) setAllUsers(data.filter(u => u.id !== currentUser?.id));
+      });
+    };
+
+    fetchDepartments();
+    fetchUsers();
+  }, [currentUser?.id, isOpen, initialType]);
 
   const toggleDept = (name: string) =>
     setSelectedDepts(prev => prev.includes(name) ? prev.filter(d => d !== name) : [...prev, name]);

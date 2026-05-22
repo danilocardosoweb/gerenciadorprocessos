@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, UploadCloud, FileText, Calendar, ChevronDown, Check, Globe, Building2, User, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DocumentItem, DocVisibility } from './DocumentManager';
+import { supabase } from '../lib/supabase';
 
 interface DocumentUploadModalProps {
   onClose: () => void;
@@ -11,6 +12,7 @@ interface DocumentUploadModalProps {
   currentUser?: { id: string; name: string; email: string; role: string; department?: string } | null;
   users?: { id: string; name: string; email: string; role: string }[];
   departments?: { id: string; name: string; color: string }[];
+  isOpen?: boolean;
 }
 
 const visibilityOptions: { value: DocVisibility; label: string; desc: string; icon: React.ElementType; color: string }[] = [
@@ -20,7 +22,7 @@ const visibilityOptions: { value: DocVisibility; label: string; desc: string; ic
   { value: 'private',    label: '🔒 Privado (só eu)',        desc: 'Apenas você pode ver',                  icon: Lock,      color: 'text-slate-400'   },
 ];
 
-export function DocumentUploadModal({ onClose, onSave, initialData, currentUser, users = [], departments = [] }: DocumentUploadModalProps) {
+export function DocumentUploadModal({ onClose, onSave, initialData, currentUser, users = [], departments = [], isOpen }: DocumentUploadModalProps) {
   const [name, setName] = useState(initialData?.name || '');
   const [type, setType] = useState(initialData?.type || 'pdf');
   const [expirationDate, setExpirationDate] = useState(initialData?.expirationDate || '');
@@ -32,6 +34,16 @@ export function DocumentUploadModal({ onClose, onSave, initialData, currentUser,
   const [deptOpen, setDeptOpen] = useState(false);
   const [specificUserId, setSpecificUserId] = useState(initialData?.specific_user_id || '');
   const [specificUserOpen, setSpecificUserOpen] = useState(false);
+  const [localDepartments, setLocalDepartments] = useState(departments);
+
+  useEffect(() => {
+    if (isOpen) {
+      supabase.from('departments').select('*').order('created_at', { ascending: true }).then(({ data, error }) => {
+        if (error) console.error('❌ Error fetching departments:', error);
+        if (data) setLocalDepartments(data);
+      });
+    }
+  }, [isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

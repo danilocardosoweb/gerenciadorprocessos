@@ -473,9 +473,10 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
 
   const handleFiles = (files: FileList) => {
     const newImages = Array.from(files).map((file) => URL.createObjectURL(file));
+    const currentImages = details.images || [];
     onUpdateDetails(nodeId, {
       ...details,
-      images: [...details.images, ...newImages],
+      images: [...currentImages, ...newImages],
     });
   };
 
@@ -485,7 +486,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
     try {
       new URL(url);
       setUrlError('');
-      onUpdateDetails(nodeId, { ...details, images: [...details.images, url] });
+      const currentImages = details.images || [];
+      onUpdateDetails(nodeId, { ...details, images: [...currentImages, url] });
       setUrlInput('');
     } catch {
       setUrlError('URL inválida. Use http:// ou https://');
@@ -496,13 +498,15 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
   const isGif   = (src: string) => /\.gif$/i.test(src);
 
   const removeImage = (index: number) => {
-    const newImages = [...details.images];
+    const currentImages = details.images || [];
+    const newImages = [...currentImages];
     newImages.splice(index, 1);
     onUpdateDetails(nodeId, { ...details, images: newImages });
   };
 
   const toggleTask = (taskId: string) => {
-    const newTasks = details.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
+    const currentTasks = details.tasks || [];
+    const newTasks = currentTasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
     onUpdateDetails(nodeId, { ...details, tasks: newTasks });
   };
 
@@ -510,13 +514,15 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
     const text = prompt("Digite a nova ação:");
     if (text) {
       const newTask = { id: Date.now().toString(), text, completed: false };
-      onUpdateDetails(nodeId, { ...details, tasks: [...details.tasks, newTask] });
+      const currentTasks = details.tasks || [];
+      onUpdateDetails(nodeId, { ...details, tasks: [...currentTasks, newTask] });
     }
   };
 
   const deleteTask = (taskId: string) => {
     if (confirm('Tem certeza que deseja excluir esta ação?')) {
-      const newTasks = details.tasks.filter(t => t.id !== taskId);
+      const currentTasks = details.tasks || [];
+      const newTasks = currentTasks.filter(t => t.id !== taskId);
       onUpdateDetails(nodeId, { ...details, tasks: newTasks });
     }
   };
@@ -524,7 +530,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
   const editTask = (taskId: string, currentText: string) => {
     const newText = prompt("Editar ação:", currentText);
     if (newText && newText !== currentText) {
-      const newTasks = details.tasks.map(t => t.id === taskId ? { ...t, text: newText } : t);
+      const currentTasks = details.tasks || [];
+      const newTasks = currentTasks.map(t => t.id === taskId ? { ...t, text: newText } : t);
       onUpdateDetails(nodeId, { ...details, tasks: newTasks });
     }
   };
@@ -675,7 +682,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                     </div>
                     
                     <div className="space-y-2">
-                      {details.tasks.length === 0 ? (
+                      {(!details.tasks || details.tasks.length === 0) ? (
                         <div className="text-sm text-slate-500 italic p-4 bg-white/5 rounded-xl border border-white/5 text-center">
                           Nenhuma ação registrada.
                         </div>
@@ -702,7 +709,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                   </section>
 
                   {/* Task Images Gallery - Separate section for all task images */}
-                  {details.tasks.some(t => t.images && t.images.length > 0) && (
+                  {details.tasks && details.tasks.some(t => t.images && t.images.length > 0) && (
                     <section className="mt-4 pt-4 border-t border-white/10">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
@@ -807,7 +814,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                   </div>
 
                   {/* Media Grid */}
-                  {details.images.length > 0 && (
+                  {details.images && details.images.length > 0 && (
                     <div className="grid grid-cols-2 gap-3 overflow-y-auto max-h-[380px] pr-1 custom-scrollbar">
                       {details.images.map((src, idx) => (
                         <div key={idx} className="relative group rounded-xl overflow-hidden aspect-video bg-black/50 border border-white/10">
@@ -845,7 +852,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                       ))}
                     </div>
                   )}
-                  {details.images.length === 0 && (
+                  {(!details.images || details.images.length === 0) && (
                     <p className="text-[11px] text-slate-600 text-center py-2">Nenhuma mídia adicionada ainda.</p>
                   )}
                 </div>
