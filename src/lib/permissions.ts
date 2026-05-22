@@ -16,6 +16,8 @@ export interface AppUser {
   name: string;
   email: string;
   role: UserRole | string;
+  department_id?: string;
+  is_department_manager?: boolean;
 }
 
 // ─── Hierarquia numérica ────────────────────────────────────────────────────
@@ -56,7 +58,7 @@ export const can = {
   editAnyTask:        (u: AppUser | null) => hasMinRole(u, 'Gerente'),
   deleteTask:         (u: AppUser | null) => hasMinRole(u, 'Gerente'),
   deleteAnyTask:      (u: AppUser | null) => hasMinRole(u, 'Administrador'),
-  approveTask:        (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  approveTask:        (u: AppUser | null) => hasMinRole(u, 'Gerente') || u?.is_department_manager === true,
   moveTask:           (u: AppUser | null) => hasMinRole(u, 'Editor'),
   assignTask:         (u: AppUser | null) => hasMinRole(u, 'Gerente'),
   sendTaskAlert:      (u: AppUser | null) => hasMinRole(u, 'Editor'),

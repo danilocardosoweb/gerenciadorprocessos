@@ -46,6 +46,10 @@ export function useSupabase() {
         allowed_user_ids: item.allowed_user_ids ?? [],
         created_by: item.created_by ?? null,
         tags: item.tags ?? [],
+        workflow_status: item.workflow_status ?? 'draft',
+        workflow_approver: item.workflow_approver ?? null,
+        workflow_approved_at: item.workflow_approved_at ?? null,
+        workflow_comments: item.workflow_comments ?? [],
       }));
 
       const rootItems: ProcessItem[] = allItems.filter((item: any) => !item.parent_id);

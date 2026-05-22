@@ -9,7 +9,7 @@ export interface AuditEntry {
   userRole: string;
   action: string;
   details: string;
-  category: 'auth' | 'config' | 'data' | 'security' | 'system';
+  category: 'auth' | 'config' | 'data' | 'security' | 'system' | 'workflow';
 }
 
 const MAX_ENTRIES = 1000;

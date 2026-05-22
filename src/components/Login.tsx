@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Network, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => boolean | Promise<boolean>;
@@ -13,6 +14,17 @@ export function Login({ onLogin, onClose }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // Load saved email on mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +45,20 @@ export function Login({ onLogin, onClose }: LoginProps) {
     if (!success) {
       setError('Email ou senha incorretos');
       setIsLoading(false);
+    } else {
+      // Save email if remember me is checked
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', email);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+      }
+    }
+  };
+
+  const handleRememberMeChange = (checked: boolean) => {
+    setRememberMe(checked);
+    if (!checked) {
+      localStorage.removeItem('rememberedEmail');
     }
   };
 
@@ -112,12 +138,21 @@ export function Login({ onLogin, onClose }: LoginProps) {
 
           <div className="mt-6 flex items-center justify-between text-sm">
             <label className="flex items-center gap-2 text-slate-400 cursor-pointer hover:text-slate-300">
-              <input type="checkbox" className="rounded border-white/20 bg-white/5" />
+              <input 
+                type="checkbox" 
+                checked={rememberMe}
+                onChange={(e) => handleRememberMeChange(e.target.checked)}
+                className="rounded border-white/20 bg-white/5" 
+              />
               Lembrar-me
             </label>
-            <a href="#" className="text-blue-400 hover:text-blue-300">
+            <button
+              type="button"
+              onClick={() => setIsForgotPasswordOpen(true)}
+              className="text-blue-400 hover:text-blue-300 transition-colors"
+            >
               Esqueceu a senha?
-            </a>
+            </button>
           </div>
 
           <button
@@ -141,6 +176,12 @@ export function Login({ onLogin, onClose }: LoginProps) {
           Acesso restrito a colaboradores autorizados.
         </p>
       </motion.div>
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+      />
     </div>
   );
 }

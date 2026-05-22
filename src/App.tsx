@@ -16,7 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { initialNodes, initialEdges } from './data';
+import { initialNodes, initialEdges, emptyMapTemplate } from './data';
 import { getLayoutedElements } from './lib/layout';
 import { MindMapNode } from './components/MindMapNode';
 import { Settings2, Download, Plus, Play, ChevronRight, ChevronLeft, Square, Target, ArrowLeft, Search, X, Image as ImageIcon, FileCode, Camera, Save, History, RotateCcw, Trash2, FileText, LogOut, Clock, LayoutGrid, Move } from 'lucide-react';
@@ -31,6 +31,7 @@ import { nodeDetailsSeed } from './data/nodeDetails';
 import { tramontinaNodeDetails } from './data/nodeDetailsTramontina';
 import { corteSerrasNodeDetails } from './data/nodeDetailsCorteSerras';
 import { Login } from './components/Login';
+import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { usePreferences } from './hooks/usePreferences';
 import { useAuditLog } from './hooks/useAuditLog';
 import { useVersionHistory } from './hooks/useVersionHistory';
@@ -48,12 +49,14 @@ const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   'hierarchical'
 );
 
-function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitle: string, onBack: () => void, currentUser: { name: string; email: string; role: string } | null }) {
+function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitle: string, onBack: () => void, currentUser: { id: string; name: string; email: string; role: string } | null }) {
   const { setCenter, fitView, getNodes, getEdges } = useReactFlow();
   
   const [layoutMode, setLayoutMode] = useState<'manual' | 'auto'>('auto');
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutMode === 'auto' ? layoutedNodes : initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
+  const [mapWorkflowStatus, setMapWorkflowStatus] = useState<string | null>(null);
+  const [mapCreatedBy, setMapCreatedBy] = useState<string | null>(null);
   
   const [selectedNodeData, setSelectedNodeData] = useState<any | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -96,10 +99,14 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
     }
   }, [layoutMode, handleAutoLayout]);
   
-  // Delete node function - only for admins
+  // Delete node function - admins always can, creators can when in review/needs_revision
   const handleDeleteNode = useCallback((nodeId: string) => {
-    if (!perms.can.deleteNode) {
-      alert('❌ Você não tem permissão para excluir nós. Apenas Administradores podem realizar esta ação.');
+    const isAdmin = perms.can.deleteNode;
+    const isCreator = currentUser?.id === mapCreatedBy;
+    const isEditableStatus = mapWorkflowStatus === 'review' || mapWorkflowStatus === 'needs_revision' || mapWorkflowStatus === 'draft';
+    
+    if (!isAdmin && !(isCreator && isEditableStatus)) {
+      alert('❌ Você não tem permissão para excluir nós. Apenas Administradores ou o criador (quando em revisão) podem realizar esta ação.');
       return;
     }
     
@@ -110,7 +117,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
     
     success('Nó excluído', 'O nó foi removido com sucesso');
-  }, [perms.can.deleteNode, setNodes, setEdges, success]);
+  }, [perms.can.deleteNode, currentUser?.id, mapCreatedBy, mapWorkflowStatus, setNodes, setEdges, success]);
   
   // Delete node with confirmation
   const handleDeleteNodeWithConfirm = useCallback(async (nodeId: string) => {
@@ -189,7 +196,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
         const { supabase } = await import('./lib/supabase');
         const { data, error } = await supabase
           .from('process_items')
-          .select('nodes, edges, title, node_details')
+          .select('nodes, edges, title, node_details, workflow_status, created_by')
           .eq('id', mapId)
           .single();
         
@@ -420,6 +427,10 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
               console.log('No Corte matches found. Node labels:', data.nodes.map((n: any) => n.data?.label).slice(0, 10));
             }
           }
+          
+          // Set workflow status and creator
+          setMapWorkflowStatus(data.workflow_status || 'draft');
+          setMapCreatedBy(data.created_by || null);
         }
       } catch (err) {
         console.error('Error loading map:', err);
@@ -1424,6 +1435,7 @@ export default function App() {
   const [currentMap, setCurrentMap] = useState<{ id: string; title: string } | null>(null);
   const [currentMarkdown, setCurrentMarkdown] = useState<{ id: string; title: string; content: string } | null>(null);
   const [currentSector3D, setCurrentSector3D] = useState<{ id: string; title: string } | null>(null);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
 
   // Preferences system
   const { preferences, setPreferences } = usePreferences();
@@ -1433,6 +1445,15 @@ export default function App() {
 
   // Session timeout tracking
   const lastActivityRef = useRef<number>(Date.now());
+
+  // Check for password reset token in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const accessToken = urlParams.get('access_token');
+    if (accessToken) {
+      setIsResetPasswordOpen(true);
+    }
+  }, []);
 
 
   // Session timeout check
@@ -1692,6 +1713,12 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Reset Password Modal */}
+      <ResetPasswordModal
+        isOpen={isResetPasswordOpen}
+        onClose={() => setIsResetPasswordOpen(false)}
+      />
     </>
   );
 }

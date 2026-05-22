@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export type WorkflowStatus = 'draft' | 'review' | 'approved' | 'published' | 'archived';
+export type WorkflowStatus = 'draft' | 'review' | 'needs_revision' | 'approved' | 'published' | 'archived';
 
 export interface WorkflowState {
   status: WorkflowStatus;
@@ -82,7 +82,8 @@ export function useWorkflow(mapId: string, currentUser?: { name: string; email: 
   const canTransition = useCallback((from: WorkflowStatus, to: WorkflowStatus, userRole?: string) => {
     const transitions: Record<WorkflowStatus, WorkflowStatus[]> = {
       draft: ['review'],
-      review: ['draft', 'approved'],
+      review: ['needs_revision', 'approved'],
+      needs_revision: ['review'],
       approved: ['published', 'draft'],
       published: ['archived', 'draft'],
       archived: ['draft'],
@@ -102,6 +103,7 @@ export function useWorkflow(mapId: string, currentUser?: { name: string; email: 
     const labels: Record<WorkflowStatus, string> = {
       draft: 'Rascunho',
       review: 'Em Revisão',
+      needs_revision: 'Precisa de Revisão',
       approved: 'Aprovado',
       published: 'Publicado',
       archived: 'Arquivado',
@@ -113,6 +115,7 @@ export function useWorkflow(mapId: string, currentUser?: { name: string; email: 
     const colors: Record<WorkflowStatus, string> = {
       draft: 'bg-slate-500',
       review: 'bg-amber-500',
+      needs_revision: 'bg-orange-500',
       approved: 'bg-emerald-500',
       published: 'bg-blue-500',
       archived: 'bg-slate-600',

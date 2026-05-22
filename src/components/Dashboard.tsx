@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 // v1.1 - Added Save button to context menu
-import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon, Save, CheckSquare, Globe, Lock, Building2, Eye, Check } from 'lucide-react';
+import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon, Save, CheckSquare, Globe, Lock, Building2, Eye, Check, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 // Helper to format dates nicely
@@ -49,6 +49,7 @@ import { supabase } from '../lib/supabase';
 import { Preferences } from '../hooks/usePreferences';
 import { AuditEntry } from '../hooks/useAuditLog';
 import { usePermissions } from '../lib/permissions';
+import { useWorkflow, WorkflowStatus } from '../hooks/useWorkflow';
 import { useSupabaseSync } from '../hooks/useSupabaseSync';
 import { SyncStatus } from './SyncStatus';
 import { useTheme } from '../hooks/useTheme';
@@ -71,6 +72,10 @@ export interface ProcessItem {
   allowed_departments?: string[];
   allowed_user_ids?: string[];
   created_by?: string | null;
+  workflow_status?: WorkflowStatus;
+  workflow_approver?: string;
+  workflow_approved_at?: string;
+  workflow_comments?: string[];
 }
 
 const initialData: ProcessItem[] = [
@@ -161,6 +166,18 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   const { items, setItems, documents, setDocuments, loading, refreshData } = useSupabase();
   const perms = usePermissions(currentUser as any);
   
+  // Filter items pending approval (for managers/admins)
+  const pendingApprovals = items.filter(item => 
+    item.type !== 'folder' && item.workflow_status === 'review'
+  );
+  
+  // Filter items needing revision by creator (for the person who created them)
+  const needsRevision = items.filter(item => 
+    item.type !== 'folder' && 
+    item.workflow_status === 'needs_revision' && 
+    item.created_by === currentUser?.id
+  );
+  
   // Sync functionality
   const {
     isConnected,
@@ -173,7 +190,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   } = useSupabaseSync();
   
   const [currentFolder, setCurrentFolder] = useState<ProcessItem | null>(null);
-  const [folderTab, setFolderTab] = useState<'items' | 'docs' | 'tasks'>('items');
+  const [folderTab, setFolderTab] = useState<'items' | 'docs' | 'tasks' | 'approvals' | 'revision'>('items');
   
   // Theme
   const { theme, resolvedTheme, setTheme } = useTheme();
@@ -201,6 +218,13 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   const [visEditDepts, setVisEditDepts] = useState<string[]>([]);
   const [allDepts, setAllDepts] = useState<{ id: string; name: string; color: string }[]>([]);
 
+  // Rejection modal
+  const [rejectItem, setRejectItem] = useState<ProcessItem | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // Approve confirmation modal
+  const [approveItem, setApproveItem] = useState<ProcessItem | null>(null);
+
   useEffect(() => {
     supabase.from('departments').select('*').order('created_at', { ascending: true }).then(({ data, error }) => {
       if (error) console.error('❌ Error fetching departments:', error);
@@ -219,6 +243,57 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     setItems(prev => prev.map(i => i.id === visibilityItem.id ? { ...i, ...upd } : i));
     setVisibilityItem(null);
     refreshData();
+  };
+
+  const handleReject = async () => {
+    if (!rejectItem || !rejectReason.trim()) {
+      alert('Por favor, informe o motivo da rejeição.');
+      return;
+    }
+    const { error } = await supabase.from('process_items').update({ 
+      workflow_status: 'needs_revision',
+      workflow_approver: currentUser?.name,
+      workflow_approved_at: new Date().toISOString(),
+      workflow_comments: [rejectReason]
+    }).eq('id', rejectItem.id);
+    if (error) {
+      alert('Erro ao rejeitar: ' + error.message);
+    } else {
+      addLog?.({
+        userName: currentUser?.name || 'Desconhecido',
+        userEmail: currentUser?.email || '-',
+        userRole: currentUser?.role || '-',
+        action: 'Rejeitar',
+        details: `Item "${rejectItem.title}" rejeitado. Motivo: ${rejectReason}`,
+        category: 'workflow'
+      });
+      setRejectItem(null);
+      setRejectReason('');
+      refreshData();
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!approveItem) return;
+    const { error } = await supabase.from('process_items').update({ 
+      workflow_status: 'approved',
+      workflow_approver: currentUser?.name,
+      workflow_approved_at: new Date().toISOString()
+    }).eq('id', approveItem.id);
+    if (error) {
+      alert('Erro ao aprovar: ' + error.message);
+    } else {
+      addLog?.({
+        userName: currentUser?.name || 'Desconhecido',
+        userEmail: currentUser?.email || '-',
+        userRole: currentUser?.role || '-',
+        action: 'Aprovar',
+        details: `Item "${approveItem.title}" aprovado`,
+        category: 'workflow'
+      });
+      setApproveItem(null);
+      refreshData();
+    }
   };
 
   // Close menus when clicking outside
@@ -566,6 +641,22 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
               >
                 <CheckSquare size={14} /> Tarefas
               </button>
+              {perms.can.approveTask && (
+                <button 
+                  onClick={() => setFolderTab('approvals')}
+                  className={cn("shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap", folderTab === 'approvals' ? "bg-amber-500/20 text-amber-400 shadow-sm" : "text-slate-400 hover:text-amber-400")}
+                >
+                  <Check size={14} /> Aprovações {pendingApprovals.length > 0 && <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{pendingApprovals.length}</span>}
+                </button>
+              )}
+              {needsRevision.length > 0 && (
+                <button 
+                  onClick={() => setFolderTab('revision')}
+                  className={cn("shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap", folderTab === 'revision' ? "bg-orange-500/20 text-orange-400 shadow-sm" : "text-slate-400 hover:text-orange-400")}
+                >
+                  <RefreshCw size={14} /> Precisa Revisar <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{needsRevision.length}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -596,7 +687,92 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
               currentUser={currentUser} 
               processItems={items}
               department={currentUser?.role}
+              addLog={addLog}
             />
+          ) : folderTab === 'approvals' ? (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-white">Aprovações Pendentes</h3>
+              {pendingApprovals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                  <Check size={48} className="mb-4 opacity-20" />
+                  <p>Nenhuma aprovação pendente.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingApprovals.map(item => (
+                    <div key={item.id} className="bg-white/5 border border-amber-500/30 rounded-xl p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                          {item.type === 'map' ? <Network size={20} /> : <FileText size={20} />}
+                        </div>
+                        <span className="px-2 py-1 text-xs font-semibold bg-amber-500/20 text-amber-400 rounded-full">Em Revisão</span>
+                      </div>
+                      <h4 className="text-white font-medium mb-1">{item.title}</h4>
+                      <p className="text-slate-400 text-sm mb-3 line-clamp-2">{item.description}</p>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setApproveItem(item);
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-semibold bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors"
+                        >
+                          Aprovar
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setRejectItem(item);
+                            setRejectReason('');
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-semibold bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                        >
+                          Rejeitar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : folderTab === 'revision' ? (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-white">Precisa de Revisão</h3>
+              {needsRevision.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                  <RefreshCw size={48} className="mb-4 opacity-20" />
+                  <p>Nenhum item precisa de revisão.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {needsRevision.map(item => (
+                    <div key={item.id} className="bg-white/5 border border-orange-500/30 rounded-xl p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="w-10 h-10 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center">
+                          {item.type === 'map' ? <Network size={20} /> : <FileText size={20} />}
+                        </div>
+                        <span className="px-2 py-1 text-xs font-semibold bg-orange-500/20 text-orange-400 rounded-full">Precisa Revisão</span>
+                      </div>
+                      <h4 className="text-white font-medium mb-1">{item.title}</h4>
+                      <p className="text-slate-400 text-sm mb-3 line-clamp-2">{item.description}</p>
+                      {item.workflow_comments && item.workflow_comments.length > 0 && (
+                        <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                          <p className="text-xs text-red-300 font-semibold mb-1">Motivo da rejeição:</p>
+                          <p className="text-xs text-red-200/80">{item.workflow_comments[0]}</p>
+                          {item.workflow_approver && (
+                            <p className="text-[10px] text-red-300/60 mt-1">— {item.workflow_approver}</p>
+                          )}
+                        </div>
+                      )}
+                      <button 
+                        onClick={() => onOpenMap(item.id, item.title)}
+                        className="w-full px-3 py-2 text-xs font-semibold bg-orange-500/20 text-orange-400 rounded-lg hover:bg-orange-500/30 transition-colors"
+                      >
+                        Revisar e Enviar Novamente
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : filteredItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
               <Search size={48} className="mb-4 opacity-20" />
@@ -701,6 +877,116 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                                   <Eye size={16} /> Visibilidade
                                 </button>
                               )}
+                              {item.type !== 'folder' && (
+                                <>
+                                  {item.workflow_status === 'draft' && (
+                                    <button 
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        const { error } = await supabase.from('process_items').update({ 
+                                          workflow_status: 'review' 
+                                        }).eq('id', item.id);
+                                        if (error) {
+                                          alert('Erro ao enviar para revisão: ' + error.message);
+                                        } else {
+                                          addLog?.({
+                                            userName: currentUser?.name || 'Desconhecido',
+                                            userEmail: currentUser?.email || '-',
+                                            userRole: currentUser?.role || '-',
+                                            action: 'Enviar para Revisão',
+                                            details: `Item "${item.title}" enviado para aprovação`,
+                                            category: 'workflow'
+                                          });
+                                          refreshData();
+                                        }
+                                      }}
+                                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 rounded-lg transition-colors"
+                                    >
+                                      <Check size={16} /> Enviar para Revisão
+                                    </button>
+                                  )}
+                                  {item.workflow_status === 'review' && perms.can.approveTask && (
+                                    <>
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenMenuId(null);
+                                          setApproveItem(item);
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                      >
+                                        <Check size={16} /> Aprovar
+                                      </button>
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenMenuId(null);
+                                          setRejectItem(item);
+                                          setRejectReason('');
+                                        }}
+                                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-300 hover:text-red-200 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      >
+                                        <X size={16} /> Rejeitar
+                                      </button>
+                                    </>
+                                  )}
+                                  {item.workflow_status === 'approved' && perms.can.approveTask && (
+                                    <button 
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        const { error } = await supabase.from('process_items').update({ 
+                                          workflow_status: 'published' 
+                                        }).eq('id', item.id);
+                                        if (error) {
+                                          alert('Erro ao publicar: ' + error.message);
+                                        } else {
+                                          addLog?.({
+                                            userName: currentUser?.name || 'Desconhecido',
+                                            userEmail: currentUser?.email || '-',
+                                            userRole: currentUser?.role || '-',
+                                            action: 'Publicar',
+                                            details: `Item "${item.title}" publicado`,
+                                            category: 'workflow'
+                                          });
+                                          refreshData();
+                                        }
+                                      }}
+                                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-blue-300 hover:text-blue-200 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                    >
+                                      <Globe size={16} /> Publicar
+                                    </button>
+                                  )}
+                                  {item.workflow_status === 'needs_revision' && item.created_by === currentUser?.id && (
+                                    <button 
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        const { error } = await supabase.from('process_items').update({ 
+                                          workflow_status: 'review' 
+                                        }).eq('id', item.id);
+                                        if (error) {
+                                          alert('Erro ao enviar para revisão: ' + error.message);
+                                        } else {
+                                          addLog?.({
+                                            userName: currentUser?.name || 'Desconhecido',
+                                            userEmail: currentUser?.email || '-',
+                                            userRole: currentUser?.role || '-',
+                                            action: 'Enviar para Revisão',
+                                            details: `Item "${item.title}" reenviado para aprovação após revisão`,
+                                            category: 'workflow'
+                                          });
+                                          refreshData();
+                                        }
+                                      }}
+                                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-orange-300 hover:text-orange-200 hover:bg-orange-500/10 rounded-lg transition-colors"
+                                    >
+                                      <RefreshCw size={16} /> Revisar e Enviar Novamente
+                                    </button>
+                                  )}
+                                </>
+                              )}
                               {perms.can.deleteNode && (
                               <>
                               <div className="h-px bg-white/5 my-1 mx-2" />
@@ -724,7 +1010,20 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
 
                   {/* Info */}
                   <div className="flex-1 min-h-0">
-                    <h3 className="text-lg font-bold text-white mb-1.5 leading-tight group-hover:text-blue-300 transition-colors line-clamp-2">{item.title}</h3>
+                    <div className="flex items-start gap-2 mb-1.5">
+                      <h3 className="text-lg font-bold text-white leading-tight group-hover:text-blue-300 transition-colors line-clamp-2 flex-1">{item.title}</h3>
+                      {item.workflow_status && (item.workflow_status === 'review' || item.workflow_status === 'needs_revision') && (
+                        <span className={cn(
+                          "px-2 py-0.5 text-[10px] font-semibold rounded-full shrink-0",
+                          item.workflow_status === 'review' ? "bg-amber-500/20 text-amber-400" :
+                          item.workflow_status === 'needs_revision' ? "bg-orange-500/20 text-orange-400" :
+                          "bg-slate-500/20 text-slate-400"
+                        )}>
+                          {item.workflow_status === 'review' ? 'Em Revisão' :
+                           item.workflow_status === 'needs_revision' ? 'Precisa Revisão' : item.workflow_status}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed">{item.description}</p>
                   </div>
 
@@ -871,6 +1170,78 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             <button onClick={handleSaveVisibility}
               className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-blue-500/20">
               Salvar
+            </button>
+          </div>
+        </motion.div>
+      </div>,
+      document.body
+    )}
+
+    {rejectItem && createPortal(
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => { setRejectItem(null); setRejectReason(''); }}
+          className="absolute inset-0 bg-[#0f172a]/80 backdrop-blur-sm" />
+        <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+          className="relative w-full max-w-md bg-[#1e293b] border border-white/10 rounded-2xl shadow-2xl p-6">
+          <h2 className="text-lg font-bold text-white mb-1">Rejeitar Item</h2>
+          <p className="text-xs text-slate-400 mb-4">{rejectItem.title}</p>
+
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-slate-400 mb-2 block">Motivo da rejeição</label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Descreva o motivo da rejeição para que o criador possa fazer as correções necessárias..."
+              className="w-full h-32 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm resize-none focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button 
+              onClick={() => { setRejectItem(null); setRejectReason(''); }}
+              className="flex-1 px-4 py-2.5 border border-white/10 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={handleReject}
+              className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-red-500/20"
+            >
+              Rejeitar
+            </button>
+          </div>
+        </motion.div>
+      </div>,
+      document.body
+    )}
+
+    {approveItem && createPortal(
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => setApproveItem(null)}
+          className="absolute inset-0 bg-[#0f172a]/80 backdrop-blur-sm" />
+        <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+          className="relative w-full max-w-sm bg-[#1e293b] border border-white/10 rounded-2xl shadow-2xl p-6">
+          <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 mx-auto">
+            <Check size={24} />
+          </div>
+          <h2 className="text-lg font-bold text-white mb-2 text-center">Aprovar Item</h2>
+          <p className="text-sm text-slate-300 mb-6 text-center">{approveItem.title}</p>
+          <p className="text-xs text-slate-400 mb-6 text-center">Tem certeza que deseja aprovar este item? Após a aprovação, ele poderá ser publicado.</p>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setApproveItem(null)}
+              className="flex-1 px-4 py-2.5 border border-white/10 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={handleApprove}
+              className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-emerald-500/20"
+            >
+              Aprovar
             </button>
           </div>
         </motion.div>
