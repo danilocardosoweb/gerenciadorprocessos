@@ -48,10 +48,12 @@ import { useSupabase } from '../hooks/useSupabase';
 import { supabase } from '../lib/supabase';
 import { Preferences } from '../hooks/usePreferences';
 import { AuditEntry } from '../hooks/useAuditLog';
+import { usePermissions } from '../lib/permissions';
 import { useSupabaseSync } from '../hooks/useSupabaseSync';
 import { SyncStatus } from './SyncStatus';
 import { useTheme } from '../hooks/useTheme';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { useAnalytics } from '../hooks/useAnalytics';
 import { MobileLayout, useIsMobile } from './MobileLayout';
 import { BarChart3 } from 'lucide-react';
 
@@ -157,6 +159,7 @@ interface DashboardProps {
 
 export function Dashboard({ currentUser, onLogout, preferences, setPreferences, enableAuditLog, addLog, onOpenMap, onOpenMarkdown, onOpenSector3D }: DashboardProps) {
   const { items, setItems, documents, setDocuments, loading, refreshData } = useSupabase();
+  const perms = usePermissions(currentUser as any);
   
   // Sync functionality
   const {
@@ -177,31 +180,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   
   // Analytics
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
-  
-  // Mock analytics data
-  const analyticsData = {
-    totalMaps: items.filter(i => i.type === 'map').length,
-    totalDocuments: documents.length,
-    activeUsers: 1,
-    avgProductionTime: 45,
-    approvalRate: 85,
-    mapsTrend: 12,
-    documentsTrend: 8,
-    topAccessedMaps: [
-      { name: 'Produção CNC', views: 45 },
-      { name: 'Processo PCP', views: 38 },
-      { name: 'Qualidade', views: 32 },
-    ],
-    dailyActivity: [
-      { day: 'Seg', actions: 12 },
-      { day: 'Ter', actions: 18 },
-      { day: 'Qua', actions: 15 },
-      { day: 'Qui', actions: 22 },
-      { day: 'Sex', actions: 28 },
-      { day: 'Sáb', actions: 8 },
-      { day: 'Dom', actions: 3 },
-    ],
-  };
+  const { data: analyticsData, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalytics([]);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Mobile detection
@@ -442,12 +421,15 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
               className="w-72 bg-white/5 border border-white/10 rounded-full pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all placeholder:text-slate-500"
             />
           </div>
+          {perms.can.importWithAI && (
           <button 
             onClick={() => setIsAiImportOpen(true)}
             className="h-10 px-4 bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 border border-purple-500/30 font-bold text-sm rounded-full flex items-center gap-2 transition-all"
           >
             <Sparkles size={16} /> Importar com IA
           </button>
+          )}
+          {perms.can.createNode && (
           <button 
             onClick={() => setIsNewItemOpen(true)} 
             className="inline-flex items-center justify-center gap-2.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-full shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-200 whitespace-nowrap"
@@ -455,13 +437,16 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             <Plus size={18} strokeWidth={2.5} />
             <span className="leading-none">Novo Item</span>
           </button>
-          {/* Analytics Button */}
+          )}
+          {/* Analytics Button - Gerente+ only */}
+          {perms.can.viewAnalytics && (
           <button
-            onClick={() => setIsAnalyticsOpen(true)}
+            onClick={() => { setIsAnalyticsOpen(true); refreshAnalytics(); }}
             className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-medium rounded-xl border border-white/10 transition-all"
           >
             <BarChart3 size={18} /> Analytics
           </button>
+          )}
           {/* Theme Toggle */}
           <button
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
@@ -503,6 +488,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                     <p className="text-sm text-slate-400">{currentUser?.email}</p>
                   </div>
                   <div className="p-2">
+                    {perms.can.viewSettings && (
                     <button
                       onClick={() => {
                         setIsUserMenuOpen(false);
@@ -512,6 +498,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                     >
                       <Settings2 size={16} /> Configurações
                     </button>
+                    )}
                     <button
                       onClick={() => {
                         setIsUserMenuOpen(false);
@@ -714,6 +701,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                                   <Eye size={16} /> Visibilidade
                                 </button>
                               )}
+                              {perms.can.deleteNode && (
+                              <>
                               <div className="h-px bg-white/5 my-1 mx-2" />
                               <button 
                                 onClick={(e) => {
@@ -724,6 +713,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                               >
                                 <Trash2 size={16} /> Excluir
                               </button>
+                              </>
+                              )}
                             </div>
                           </motion.div>
                         )}

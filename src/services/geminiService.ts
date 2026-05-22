@@ -1,10 +1,7 @@
 import * as mammoth from 'mammoth';
 import { getLayoutedElements } from '../lib/layout';
 
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  throw new Error('GEMINI_API_KEY is not configured');
-}
+const apiKey = (process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '') as string;
 
 export interface MindMapNode {
   id: string;
@@ -81,8 +78,12 @@ IMPORTANTE:
 - As posições (x, y) podem ser 0,0 pois serão calculadas pelo layout automático`;
 
   try {
+    if (!apiKey) {
+      throw new Error('VITE_GEMINI_API_KEY não configurada no .env');
+    }
+
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -298,9 +299,34 @@ export async function extractTextFromFile(file: File): Promise<string> {
     return await file.text();
   }
 
-  // PDF files
+  // PDF files - extract text using pdfjs-dist
   if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-    throw new Error('PDF extraction requires manual text extraction. Please copy the text from the PDF and use "Colar Texto" option.');
+    try {
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        fullText += pageText + '\n';
+      }
+      
+      if (!fullText.trim()) {
+        throw new Error('PDF sem texto extraível (pode ser uma imagem). Use o campo de texto manual.');
+      }
+      
+      return fullText;
+    } catch (error: any) {
+      console.error('PDF extraction error:', error);
+      throw new Error(error.message || 'Falha ao extrair texto do PDF. Use o campo de texto manual.');
+    }
   }
 
   // DOCX files using mammoth
@@ -315,5 +341,10 @@ export async function extractTextFromFile(file: File): Promise<string> {
     }
   }
 
-  throw new Error('Unsupported file type. Please use .txt, .docx files or use "Colar Texto" option.');
+  // DOC (old format) - not supported natively
+  if (fileName.endsWith('.doc')) {
+    throw new Error('Formato .doc antigo não suportado. Salve como .docx ou .txt e tente novamente.');
+  }
+
+  throw new Error('Formato de arquivo não suportado. Use .pdf, .docx ou .txt, ou cole o texto manualmente.');
 }

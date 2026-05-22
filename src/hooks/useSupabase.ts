@@ -41,6 +41,11 @@ export function useSupabase() {
         content: item.content,
         items: [],
         updatedAt: new Date(item.created_at).toLocaleDateString('pt-BR'),
+        visibility: item.visibility ?? 'public',
+        allowed_departments: item.allowed_departments ?? [],
+        allowed_user_ids: item.allowed_user_ids ?? [],
+        created_by: item.created_by ?? null,
+        tags: item.tags ?? [],
       }));
 
       const rootItems: ProcessItem[] = allItems.filter((item: any) => !item.parent_id);
@@ -102,7 +107,7 @@ export function useSupabase() {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase.from('users').select('*');
+      const { data, error } = await supabase.from('tecno_users').select('*');
       if (error) {
         console.error('❌ Error fetching users:', error);
         setUsers([]);

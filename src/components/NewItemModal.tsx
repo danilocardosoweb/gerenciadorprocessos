@@ -45,7 +45,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
       if (error) console.error('❌ Error fetching departments:', error);
       if (data) setAllDepartments(data);
     });
-    supabase.from('users').select('*').eq('status', 'Ativo').order('created_at', { ascending: true }).then(({ data, error }) => {
+    supabase.from('tecno_users').select('*').eq('status', 'Ativo').order('created_at', { ascending: true }).then(({ data, error }) => {
       if (error) console.error('❌ Error fetching users:', error);
       if (data) setAllUsers(data.filter(u => u.id !== currentUser?.id));
     });

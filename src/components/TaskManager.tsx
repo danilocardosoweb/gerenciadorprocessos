@@ -135,7 +135,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
         .from('tasks')
         .select(`
           *,
-          assigned_user:users!tasks_assigned_to_fkey(*),
+          assigned_user:tecno_users!tasks_assigned_to_fkey(*),
           process_item:process_items(*),
           department_data:departments(*)
         `)
@@ -161,6 +161,8 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       );
       
       setTasks(tasksWithCounts);
+      console.log('[TaskManager] Tasks loaded:', tasksWithCounts.length, 'currentUser.role:', currentUser?.role, 'currentUser.id:', currentUser?.id);
+      tasksWithCounts.forEach(t => console.log('  task:', t.id, '| visibility:', t.visibility, '| created_by:', t.created_by, '| status:', t.status));
     } catch (err) {
       console.error('Error fetching tasks:', err);
     } finally {
@@ -171,7 +173,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('tecno_users')
         .select('*');
       
       if (error) throw error;
@@ -199,13 +201,17 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'Administrador';
     return tasks.filter(task => {
       if (filterStatus !== 'all' && task.status !== filterStatus) return false;
       if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
       if (filterDepartment !== 'all' && task.department_id !== filterDepartment) return false;
       if (searchQuery && !(task.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
       
-      // Visibility filter
+      // Admins see everything
+      if (isAdmin) return true;
+
+      // Visibility filter for non-admins
       if (task.visibility === 'private' && task.created_by !== currentUser?.id) return false;
       if (task.visibility === 'specific') {
         const isCreator  = task.created_by  === currentUser?.id;
@@ -223,7 +229,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
     });
   }, [tasks, filterStatus, filterPriority, filterDepartment, searchQuery, currentUser]);
 
-  // Group by status for kanban
+  // Group by status for kanban - include all types (epic, task, subtask)
   const kanbanColumns = useMemo(() => {
     const columns: Record<string, Task[]> = {
       backlog: [],
@@ -235,9 +241,9 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
     };
     
     filteredTasks.forEach(task => {
-      if (columns[task.status]) {
-        columns[task.status].push(task);
-      }
+      const col = columns[task.status];
+      if (col) col.push(task);
+      else columns['backlog'].push(task); // fallback for unknown status
     });
     
     return columns;
@@ -334,7 +340,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const fetchComments = useCallback(async (taskId: string) => {
     const { data } = await supabase
       .from('task_comments')
-      .select('*, user:users!task_comments_user_id_fkey(*)')
+      .select('*, user:tecno_users!task_comments_user_id_fkey(*)')
       .eq('task_id', taskId)
       .order('created_at', { ascending: true });
     setComments(data || []);
@@ -343,7 +349,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const fetchAlerts = useCallback(async (taskId: string) => {
     const { data } = await supabase
       .from('task_alerts')
-      .select('*, from_user:users!task_alerts_from_user_id_fkey(*), to_user:users!task_alerts_to_user_id_fkey(*)')
+      .select('*, from_user:tecno_users!task_alerts_from_user_id_fkey(*), to_user:tecno_users!task_alerts_to_user_id_fkey(*)')
       .eq('task_id', taskId)
       .order('created_at', { ascending: false });
     setAlerts(data || []);
@@ -370,7 +376,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
   const sendComment = async () => {
     if (!(newComment || '').trim() || !detailTask || !currentUser) return;
     const payload = { task_id: detailTask.id, user_id: currentUser.id, content: (newComment || '').trim() };
-    const { data } = await supabase.from('task_comments').insert(payload).select('*, user:users!task_comments_user_id_fkey(*)').single();
+    const { data } = await supabase.from('task_comments').insert(payload).select('*, user:tecno_users!task_comments_user_id_fkey(*)').single();
     if (data) setComments(prev => [...prev, data]);
     setNewComment('');
   };
@@ -385,7 +391,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
       type: newAlert.type,
     };
     const { data } = await supabase.from('task_alerts').insert(payload)
-      .select('*, from_user:users!task_alerts_from_user_id_fkey(*), to_user:users!task_alerts_to_user_id_fkey(*)').single();
+      .select('*, from_user:tecno_users!task_alerts_from_user_id_fkey(*), to_user:tecno_users!task_alerts_to_user_id_fkey(*)').single();
     if (data) setAlerts(prev => [data, ...prev]);
     setNewAlert({ message: '', to_user_id: '', type: 'info' });
   };
@@ -634,7 +640,7 @@ export function TaskManager({ currentUser, processItems, department }: TaskManag
           // Kanban View
           <div className="h-full overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
             <div className="flex gap-4 p-5 h-full min-w-max lg:min-w-0 lg:grid lg:grid-cols-6 lg:gap-3">
-              {Object.entries(kanbanColumns).map(([status, columnTasks]) => {
+              {(Object.entries(kanbanColumns) as [string, Task[]][]).map(([status, columnTasks]) => {
                 const config = statusConfig[status as Task['status']];
                 const isDragTarget = dragOverColumn === status && draggedTaskId;
                 return (

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ReactFlow,
   MiniMap,
@@ -18,7 +19,7 @@ import '@xyflow/react/dist/style.css';
 import { initialNodes, initialEdges } from './data';
 import { getLayoutedElements } from './lib/layout';
 import { MindMapNode } from './components/MindMapNode';
-import { Settings2, Download, Plus, Play, ChevronRight, ChevronLeft, Square, Target, ArrowLeft, Search, X, Image as ImageIcon, FileCode, Camera, Save, History, RotateCcw, Trash2, FileText } from 'lucide-react';
+import { Settings2, Download, Plus, Play, ChevronRight, ChevronLeft, Square, Target, ArrowLeft, Search, X, Image as ImageIcon, FileCode, Camera, Save, History, RotateCcw, Trash2, FileText, LogOut, Clock, LayoutGrid, Move } from 'lucide-react';
 import { NodeModal, NodeDetails } from './components/NodeModal';
 import { AddNodeModal } from './components/AddNodeModal';
 import { Node } from '@xyflow/react';
@@ -44,13 +45,14 @@ import { usePermissions } from './lib/permissions';
 const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   initialNodes,
   initialEdges,
-  'LR'
+  'hierarchical'
 );
 
 function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitle: string, onBack: () => void, currentUser: { name: string; email: string; role: string } | null }) {
   const { setCenter, fitView, getNodes, getEdges } = useReactFlow();
   
-  const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
+  const [layoutMode, setLayoutMode] = useState<'manual' | 'auto'>('auto');
+  const [nodes, setNodes, onNodesChange] = useNodesState(layoutMode === 'auto' ? layoutedNodes : initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
   
   const [selectedNodeData, setSelectedNodeData] = useState<any | null>(null);
@@ -75,6 +77,24 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
   
   // Centralized permissions
   const perms = usePermissions(currentUser as any);
+
+  // Auto-arrange function
+  const handleAutoLayout = useCallback(() => {
+    const { nodes: newNodes, edges: newEdges } = getLayoutedElements(getNodes(), getEdges(), 'hierarchical');
+    setNodes(newNodes);
+    setEdges(newEdges);
+    setLayoutMode('auto');
+    fitView({ duration: 800 });
+  }, [getNodes, getEdges, setNodes, setEdges, fitView]);
+
+  // Toggle layout mode
+  const toggleLayoutMode = useCallback(() => {
+    const newMode = layoutMode === 'auto' ? 'manual' : 'auto';
+    setLayoutMode(newMode);
+    if (newMode === 'auto') {
+      handleAutoLayout();
+    }
+  }, [layoutMode, handleAutoLayout]);
   
   // Delete node function - only for admins
   const handleDeleteNode = useCallback((nodeId: string) => {
@@ -1032,6 +1052,30 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
                   </div>
                 </Panel>
               )}
+
+              {/* Layout Controls Panel */}
+              {!isPresenting && (
+                <Panel position="top-right" className="mt-4">
+                  <div className="flex flex-col gap-2 bg-[#0f172a]/90 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 shadow-2xl">
+                    <button
+                      onClick={handleAutoLayout}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                      title="Auto-arrumar layout"
+                    >
+                      <LayoutGrid size={16} />
+                      <span>Auto-arrumar</span>
+                    </button>
+                    <button
+                      onClick={toggleLayoutMode}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                      title={layoutMode === 'auto' ? 'Mudar para manual' : 'Mudar para automático'}
+                    >
+                      <Move size={16} />
+                      <span>{layoutMode === 'auto' ? 'Manual' : 'Auto'}</span>
+                    </button>
+                  </div>
+                </Panel>
+              )}
             </ReactFlow>
           ) : (
             <div className="absolute inset-0">
@@ -1375,6 +1419,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser }: { mapId: string, mapTitl
 export default function App() {
   // All state hooks must be at the top before any conditionals
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; role: string; department?: string } | null>(null);
   const [currentMap, setCurrentMap] = useState<{ id: string; title: string } | null>(null);
   const [currentMarkdown, setCurrentMarkdown] = useState<{ id: string; title: string; content: string } | null>(null);
@@ -1389,12 +1434,6 @@ export default function App() {
   // Session timeout tracking
   const lastActivityRef = useRef<number>(Date.now());
 
-  // Mock users database (in real app this would come from backend)
-  const mockUsers = [
-    { id: '00000000-0000-0000-0000-000000000001', email: 'pcp@tecnoperfilalumino.com.br', password: 'admin123', name: 'Danilo Cardoso', role: 'Administrador' },
-    { id: '00000000-0000-0000-0000-000000000002', email: 'joao.silva@exemplo.com', password: '123456', name: 'João Silva', role: 'Editor' },
-    { id: '00000000-0000-0000-0000-000000000003', email: 'maria.souza@exemplo.com', password: '123456', name: 'Maria Souza', role: 'Editor' },
-  ];
 
   // Session timeout check
   useEffect(() => {
@@ -1413,8 +1452,7 @@ export default function App() {
           details: `Sessão encerrada por inatividade de ${preferences.sessionTimeout} minutos`,
           category: 'security'
         });
-        alert('Sessão expirada por inatividade.');
-        handleLogout();
+        setShowSessionExpired(true);
       }
     };
 
@@ -1442,22 +1480,47 @@ export default function App() {
   }, [isAuthenticated]);
 
   const handleLogin = async (email: string, password: string): Promise<boolean> => {
-    const user = mockUsers.find(u => u.email === email && u.password === password);
-    if (user) {
-      // Fetch department from Supabase
+    try {
       const { supabase } = await import('./lib/supabase');
-      const { data: dbUser } = await supabase.from('users').select('department').eq('id', user.id).single();
-      setIsAuthenticated(true);
-      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role, department: dbUser?.department ?? undefined });
-      addLog({
-        userName: user.name,
-        userEmail: user.email,
-        userRole: user.role,
-        action: 'Login',
-        details: `Usuário autenticado com sucesso`,
-        category: 'auth'
-      });
-      return true;
+      // First try: exact case-insensitive email match
+      let { data: user, error } = await supabase
+        .from('tecno_users')
+        .select('id, name, email, role, department, status, password')
+        .ilike('email', email.trim())
+        .neq('status', 'Inativo')
+        .single();
+
+      // Fallback: if not found, search all active users and match manually (handles typos in stored email)
+      if (error || !user) {
+        const { data: allUsers } = await supabase
+          .from('tecno_users')
+          .select('id, name, email, role, department, status, password')
+          .neq('status', 'Inativo');
+        user = (allUsers || []).find((u: any) =>
+          u.email?.toLowerCase() === email.trim().toLowerCase() && u.password === password
+        ) || null;
+        error = null;
+      }
+
+      console.log('[LOGIN DEBUG] email typed:', email.trim());
+      console.log('[LOGIN DEBUG] error:', error);
+      console.log('[LOGIN DEBUG] user found:', user ? { id: user.id, email: user.email, status: user.status, hasPassword: !!user.password, passwordMatch: user.password === password } : null);
+
+      if (!error && user && user.password === password) {
+        setIsAuthenticated(true);
+        setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role, department: user.department ?? undefined });
+        addLog({
+          userName: user.name,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'Login',
+          details: `Usuário autenticado com sucesso`,
+          category: 'auth'
+        });
+        return true;
+      }
+    } catch (err) {
+      console.error('Login error:', err);
     }
     addLog({
       userName: 'Desconhecido',
@@ -1534,47 +1597,102 @@ export default function App() {
   }
 
   return (
-    <Dashboard
-      currentUser={currentUser}
-      onLogout={handleLogout}
-      preferences={preferences}
-      setPreferences={setPreferences}
-      enableAuditLog={preferences.enableAuditLog}
-      addLog={addLog}
-      onOpenMap={(id, title) => {
-        addLog({
-          userName: currentUser?.name || 'Desconhecido',
-          userEmail: currentUser?.email || '-',
-          userRole: currentUser?.role || '-',
-          action: 'Abrir Mapa',
-          details: `Mapa aberto: ${title}`,
-          category: 'data'
-        });
-        setCurrentMap({ id, title });
-      }}
-      onOpenMarkdown={(id, title, content) => {
-        addLog({
-          userName: currentUser?.name || 'Desconhecido',
-          userEmail: currentUser?.email || '-',
-          userRole: currentUser?.role || '-',
-          action: 'Abrir Documento',
-          details: `Documento markdown aberto: ${title}`,
-          category: 'data'
-        });
-        setCurrentMarkdown({ id, title, content });
-      }}
-      onOpenSector3D={(id, title) => {
-        addLog({
-          userName: currentUser?.name || 'Desconhecido',
-          userEmail: currentUser?.email || '-',
-          userRole: currentUser?.role || '-',
-          action: 'Abrir Setor 3D',
-          details: `Visualização 3D aberta: ${title}`,
-          category: 'data'
-        });
-        setCurrentSector3D({ id, title });
-      }}
-    />
+    <>
+      <Dashboard
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        preferences={preferences}
+        setPreferences={setPreferences}
+        enableAuditLog={preferences.enableAuditLog}
+        addLog={addLog}
+        onOpenMap={(id, title) => {
+          addLog({
+            userName: currentUser?.name || 'Desconhecido',
+            userEmail: currentUser?.email || '-',
+            userRole: currentUser?.role || '-',
+            action: 'Abrir Mapa',
+            details: `Mapa aberto: ${title}`,
+            category: 'data'
+          });
+          setCurrentMap({ id, title });
+        }}
+        onOpenMarkdown={(id, title, content) => {
+          addLog({
+            userName: currentUser?.name || 'Desconhecido',
+            userEmail: currentUser?.email || '-',
+            userRole: currentUser?.role || '-',
+            action: 'Abrir Documento',
+            details: `Documento markdown aberto: ${title}`,
+            category: 'data'
+          });
+          setCurrentMarkdown({ id, title, content });
+        }}
+        onOpenSector3D={(id, title) => {
+          addLog({
+            userName: currentUser?.name || 'Desconhecido',
+            userEmail: currentUser?.email || '-',
+            userRole: currentUser?.role || '-',
+            action: 'Abrir Setor 3D',
+            details: `Visualização 3D aberta: ${title}`,
+            category: 'data'
+          });
+          setCurrentSector3D({ id, title });
+        }}
+      />
+
+      {/* Session Expired Modal */}
+      <AnimatePresence>
+        {showSessionExpired && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="w-full max-w-sm mx-4 bg-[#1e293b] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            >
+              {/* Header */}
+              <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-5 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+                  <Clock size={24} className="text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Sessão Expirada</h2>
+                  <p className="text-sm text-amber-400/80">Por inatividade</p>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5">
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Sua sessão foi encerrada automaticamente após{' '}
+                  <span className="font-semibold text-white">{preferences.sessionTimeout} minutos</span>{' '}
+                  de inatividade. Faça login novamente para continuar.
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 pb-6">
+                <button
+                  onClick={() => {
+                    setShowSessionExpired(false);
+                    handleLogout();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20"
+                >
+                  <LogOut size={16} /> Fazer Login Novamente
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

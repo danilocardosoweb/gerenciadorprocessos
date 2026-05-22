@@ -34,7 +34,7 @@ export function useUsers() {
     setLoading(true);
     setError(null);
     const [{ data: usersData, error: usersErr }, { data: deptsData, error: deptsErr }] = await Promise.all([
-      supabase.from('users').select('*').order('created_at', { ascending: false }),
+      supabase.from('tecno_users').select('*').order('created_at', { ascending: false }),
       supabase.from('departments').select('*').order('created_at', { ascending: true }),
     ]);
     if (usersErr) {
@@ -55,8 +55,8 @@ export function useUsers() {
     setError(null);
     try {
       const { data, error } = await supabase
-        .from('users')
-        .insert({ name: userData.name, email: userData.email, role: userData.role, department: userData.department, status: userData.status })
+        .from('tecno_users')
+        .insert({ name: userData.name, email: userData.email, role: userData.role, department: userData.department, status: userData.status, password: userData.password || '123456' })
         .select().single();
       if (error) throw error;
       setUsers(prev => [...prev, { ...data, status: data.status || 'Ativo' }]);
@@ -70,10 +70,12 @@ export function useUsers() {
   const updateUser = useCallback(async (id: string, userData: Partial<User> & { password?: string }) => {
     setError(null);
     try {
-      const { error } = await supabase.from('users').update({
+      const updatePayload: any = {
         name: userData.name, email: userData.email, role: userData.role,
         department: userData.department, status: userData.status,
-      }).eq('id', id);
+      };
+      if (userData.password) updatePayload.password = userData.password;
+      const { error } = await supabase.from('tecno_users').update(updatePayload).eq('id', id);
       if (error) throw error;
       setUsers(prev => prev.map(u => u.id === id ? { ...u, ...userData } : u));
       return { success: true };
@@ -86,7 +88,7 @@ export function useUsers() {
   const deleteUser = useCallback(async (id: string) => {
     setError(null);
     try {
-      const { error } = await supabase.from('users').delete().eq('id', id);
+      const { error } = await supabase.from('tecno_users').delete().eq('id', id);
       if (error) throw error;
       setUsers(prev => prev.filter(u => u.id !== id));
       return { success: true };

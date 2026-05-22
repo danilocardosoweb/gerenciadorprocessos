@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { usePermissions } from '../lib/permissions';
 import { ProcessItem } from './Dashboard';
 
 interface Department {
@@ -37,6 +38,7 @@ export function CreateTaskModal({
   users: usersProp,
   departments: departmentsProp
 }: CreateTaskModalProps) {
+  const perms = usePermissions(currentUser as any);
   const [isLoading, setIsLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>(departmentsProp || []);
   const [users, setUsers] = useState(usersProp || []);
@@ -46,7 +48,7 @@ export function CreateTaskModal({
     if (!isOpen) return;
     Promise.all([
       supabase.from('departments').select('*').order('created_at', { ascending: true }),
-      supabase.from('users').select('*').order('created_at', { ascending: true }),
+      supabase.from('tecno_users').select('*').order('created_at', { ascending: true }),
     ]).then(([{ data: depts, error: deptsErr }, { data: usrs, error: usrsErr }]) => {
       if (deptsErr) console.error('❌ Error fetching departments:', deptsErr);
       if (usrsErr) console.error('❌ Error fetching users:', usrsErr);
@@ -463,8 +465,8 @@ export function CreateTaskModal({
               </div>
             </div>
 
-            {/* Assigned To */}
-            <div className="space-y-2">
+            {/* Assigned To - Gerente+ only */}
+            {perms.can.assignTask && <div className="space-y-2">
               <label className="text-sm font-medium text-slate-300 flex items-center gap-2"><User size={14} />Atribuir para</label>
               <div className="relative">
                 <button type="button" onClick={() => { setUserOpen(o => !o); setDeptOpen(false); setPriorityOpen(false); setVisibilityOpen(false); setProcessOpen(false); }}
@@ -508,7 +510,7 @@ export function CreateTaskModal({
                   )}
                 </AnimatePresence>
               </div>
-            </div>
+            </div>}
 
             {/* Link to Process */}
             <div className="space-y-2">

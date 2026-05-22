@@ -9,6 +9,9 @@ import {
   CheckCircle2,
   ArrowUpRight,
   ArrowDownRight,
+  AlertTriangle,
+  CheckCircle,
+  ListTodo,
 } from 'lucide-react';
 
 interface AnalyticsData {
@@ -21,6 +24,18 @@ interface AnalyticsData {
   documentsTrend: number;
   topAccessedMaps: { name: string; views: number }[];
   dailyActivity: { day: string; actions: number }[];
+  // Task breakdown
+  tasksByStatus: {
+    backlog: number;
+    todo: number;
+    in_progress: number;
+    review: number;
+    done: number;
+    cancelled: number;
+  };
+  totalTasks: number;
+  completedTasks: number;
+  overdueTasks: number;
 }
 
 interface AnalyticsDashboardProps {
@@ -134,6 +149,44 @@ export function AnalyticsDashboard({ isOpen, onClose, data }: AnalyticsDashboard
             />
           </div>
 
+          {/* Task Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <StatCard
+              title="Total de Tarefas"
+              value={data.totalTasks}
+              icon={ListTodo}
+              color="bg-slate-500"
+            />
+            <StatCard
+              title="Concluídas"
+              value={data.completedTasks}
+              icon={CheckCircle}
+              color="bg-emerald-500"
+            />
+            <StatCard
+              title="Atrasadas"
+              value={data.overdueTasks}
+              icon={AlertTriangle}
+              color="bg-red-500"
+            />
+          </div>
+
+          {/* Task Status Breakdown */}
+          <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-8">
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <ListTodo size={18} className="text-blue-400" />
+              Tarefas por Status
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <StatusBadge label="Backlog" count={data.tasksByStatus.backlog} color="bg-slate-500" />
+              <StatusBadge label="A Fazer" count={data.tasksByStatus.todo} color="bg-blue-500" />
+              <StatusBadge label="Em Andamento" count={data.tasksByStatus.in_progress} color="bg-yellow-500" />
+              <StatusBadge label="Em Revisão" count={data.tasksByStatus.review} color="bg-purple-500" />
+              <StatusBadge label="Concluído" count={data.tasksByStatus.done} color="bg-emerald-500" />
+              <StatusBadge label="Cancelado" count={data.tasksByStatus.cancelled} color="bg-red-500" />
+            </div>
+          </div>
+
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Top Accessed Maps */}
@@ -199,3 +252,10 @@ export function AnalyticsDashboard({ isOpen, onClose, data }: AnalyticsDashboard
     </div>
   );
 }
+
+const StatusBadge = ({ label, count, color }: { label: string; count: number; color: string }) => (
+  <div className={`p-3 rounded-lg ${color}/20 border border-${color.replace('bg-', '')}/30`}>
+    <p className="text-xs text-slate-400 mb-1">{label}</p>
+    <p className="text-xl font-bold text-white">{count}</p>
+  </div>
+);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Image as ImageIcon, AlertTriangle, CheckCircle2, CloudUpload, Search, File, Trash2, Download, MoreVertical, FileBadge, Edit3, Globe, Building2, User, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePermissions } from '../lib/permissions';
 import { DocumentUploadModal } from './DocumentUploadModal';
 
 import { supabase } from '../lib/supabase';
@@ -40,6 +41,7 @@ const visibilityConfig: Record<DocVisibility, { icon: React.FC<{ size?: number; 
 };
 
 export function DocumentManager({ documents, setDocuments, refreshData, currentUser, users: usersProp = [], departments: deptsProp = [] }: DocumentManagerProps) {
+  const perms = usePermissions(currentUser as any);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
@@ -49,7 +51,7 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
   useEffect(() => {
     if (usersProp.length === 0 || deptsProp.length === 0) {
       Promise.all([
-        supabase.from('users').select('*').order('created_at', { ascending: true }),
+        supabase.from('tecno_users').select('*').order('created_at', { ascending: true }),
         supabase.from('departments').select('*').order('created_at', { ascending: true }),
       ]).then(([{ data: u, error: uErr }, { data: d, error: dErr }]) => {
         if (uErr) console.error('❌ Error fetching users:', uErr);
@@ -114,6 +116,10 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
   };
 
   const handleDeleteDoc = async (id: string) => {
+    if (!perms.can.deleteDocument) {
+      alert('❌ Você não tem permissão para excluir documentos.');
+      return;
+    }
     if (!confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá EXCLUIR este documento permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) return;
     setDocuments(documents.filter(d => d.id !== id));
     await supabase.from('documents').delete().eq('id', id);
@@ -186,6 +192,8 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
             setIsModalOpen(true);
           }}
           className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-500/20"
+          disabled={!perms.can.uploadDocument}
+          title={!perms.can.uploadDocument ? 'Sem permissão para cadastrar documentos' : ''}
         >
           <CloudUpload size={18} /> Cadastrar Documento
         </button>
@@ -272,6 +280,7 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
                         <button className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Download">
                           <Download size={18} />
                         </button>
+                        {perms.can.deleteDocument && (
                         <button 
                           onClick={() => handleDeleteDoc(doc.id)}
                           className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
@@ -279,6 +288,7 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
                         >
                           <Trash2 size={18} />
                         </button>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
