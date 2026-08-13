@@ -18,18 +18,18 @@ export function useSupabase() {
       const { data, error } = await supabase.from('process_items').select('*');
       
       if (error) {
-        console.error('❌ Error fetching process items:', error);
+        console.error('L Error fetching process items:', error);
         setItems([]);
         return;
       }
       
       if (!data || data.length === 0) {
-        console.log('✅ No process items found in Supabase (database is empty)');
+        console.log(' No process items found in Supabase (database is empty)');
         setItems([]);
         return;
       }
       
-      console.log('✅ Fetched process items from Supabase:', data);
+      console.log(' Fetched process items from Supabase:', data);
       
       // Transform flat table into nested ProcessItem structure
       const allItems = data.map((item: any) => ({
@@ -65,7 +65,7 @@ export function useSupabase() {
 
       setItems(rootItems);
     } catch (err) {
-      console.error('❌ Exception fetching process items:', err);
+      console.error('L Exception fetching process items:', err);
       setItems([]);
     }
   };
@@ -74,7 +74,7 @@ export function useSupabase() {
     try {
       const { data, error } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
       if (error) {
-        console.error('❌ Error fetching documents:', error);
+        console.error('L Error fetching documents:', error);
         return;
       }
       
@@ -83,6 +83,9 @@ export function useSupabase() {
         name: doc.name,
         type: doc.type,
         size: doc.size,
+        file_size_bytes: doc.file_size_bytes ?? null,
+        file_path: doc.file_path ?? null,
+        mime_type: doc.mime_type ?? null,
         uploadDate: doc.upload_date,
         expirationDate: doc.expiration_date,
         status: doc.status,
@@ -92,10 +95,10 @@ export function useSupabase() {
         created_by: doc.created_by || null,
       }));
       
-      console.log('✅ Fetched documents from Supabase:', docs);
+      console.log(' Fetched documents from Supabase:', docs);
       setDocuments(docs);
     } catch (err) {
-      console.error('❌ Exception fetching documents:', err);
+      console.error('L Exception fetching documents:', err);
       setDocuments([]);
     }
   };
@@ -113,21 +116,21 @@ export function useSupabase() {
     try {
       const { data, error } = await supabase.from('tecno_users').select('*');
       if (error) {
-        console.error('❌ Error fetching users:', error);
+        console.error('L Error fetching users:', error);
         setUsers([]);
         return;
       }
       
       if (!data || data.length === 0) {
-        console.log('✅ No users found in Supabase');
+        console.log(' Não users found in Supabase');
         setUsers([]);
         return;
       }
       
-      console.log('✅ Fetched users from Supabase:', data);
+      console.log(' Fetched users from Supabase:', data);
       setUsers(data);
     } catch (err) {
-      console.error('❌ Exception fetching users:', err);
+      console.error('L Exception fetching users:', err);
       setUsers([]);
     }
   };

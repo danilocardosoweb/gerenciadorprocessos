@@ -13,6 +13,7 @@ import {
   CheckCircle,
   ListTodo,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface AnalyticsData {
   totalMaps: number;
@@ -59,7 +60,7 @@ export function AnalyticsDashboard({ isOpen, onClose, data }: AnalyticsDashboard
     value: string | number;
     trend?: number;
     trendUp?: boolean;
-    icon: React.ElementType;
+    icon: LucideIcon;
     color: string;
   }) => (
     <div className="bg-white/5 border border-white/10 rounded-xl p-5">
@@ -181,7 +182,7 @@ export function AnalyticsDashboard({ isOpen, onClose, data }: AnalyticsDashboard
               <StatusBadge label="Backlog" count={data.tasksByStatus.backlog} color="bg-slate-500" />
               <StatusBadge label="A Fazer" count={data.tasksByStatus.todo} color="bg-blue-500" />
               <StatusBadge label="Em Andamento" count={data.tasksByStatus.in_progress} color="bg-yellow-500" />
-              <StatusBadge label="Em Revisão" count={data.tasksByStatus.review} color="bg-purple-500" />
+              <StatusBadge label="Em Reviso" count={data.tasksByStatus.review} color="bg-purple-500" />
               <StatusBadge label="Concluído" count={data.tasksByStatus.done} color="bg-emerald-500" />
               <StatusBadge label="Cancelado" count={data.tasksByStatus.cancelled} color="bg-red-500" />
             </div>

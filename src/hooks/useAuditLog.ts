@@ -25,7 +25,7 @@ export function useAuditLog(enabled: boolean) {
       .order('timestamp', { ascending: false })
       .limit(MAX_ENTRIES)
       .then(({ data, error }) => {
-        if (error) console.error('❌ Error fetching audit logs:', error);
+        if (error) console.error('L Error fetching audit logs:', error);
         if (data) {
           setLogs(data.map(r => ({
             id: r.id,
@@ -83,10 +83,10 @@ Total de registros: ${logs.length}
       const date = new Date(log.timestamp).toLocaleString('pt-BR');
       return `[${(index + 1).toString().padStart(4, '0')}] ${date}
         Usuário: ${log.userName} (${log.userEmail}) [${log.userRole}]
-        Ação: ${log.action}
+        Ao: ${log.action}
         Categoria: ${log.category.toUpperCase()}
         Detalhes: ${log.details}
-        ${'─'.repeat(70)}
+        ${''.repeat(70)}
 `;
     }).join('\n');
 

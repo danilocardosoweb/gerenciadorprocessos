@@ -1,12 +1,12 @@
 /**
  * SISTEMA DE CONTROLE DE ACESSO (RBAC)
- * Role-Based Access Control — Tecno Mapper
+ * Role-Based Access Control  Tecno Mapper
  *
  * Níveis hierárquicos (do maior para o menor):
- *   1. Administrador  — Acesso total, irrestrito
- *   2. Gerente        — Gerencia equipe e aprova tarefas, sem config do sistema
- *   3. Editor         — Cria e edita conteúdo próprio
- *   4. Visualizador   — Somente leitura, sem edição
+ *   1. Administrador   Acesso total, irrestrito
+ *   2. Gerente         Gerencia equipe e aprova tarefas, sem config do sistema
+ *   3. Editor          Cria e edita conteúdo próprio
+ *   4. Visualizador    Somente leitura, sem edição
  */
 
 export type UserRole = 'Administrador' | 'Gerente' | 'Editor' | 'Visualizador';
@@ -20,7 +20,7 @@ export interface AppUser {
   is_department_manager?: boolean;
 }
 
-// ─── Hierarquia numérica ────────────────────────────────────────────────────
+//  Hierarquia numérica 
 const ROLE_LEVEL: Record<string, number> = {
   Administrador: 4,
   Gerente:       3,
@@ -37,12 +37,12 @@ export function hasMinRole(user: AppUser | null, minRole: UserRole): boolean {
   return getRoleLevel(user.role) >= getRoleLevel(minRole);
 }
 
-// ─── Permissões por módulo ──────────────────────────────────────────────────
+//  Permissões por módulo 
 
 /** Mapa Mental / Processos */
 export const can = {
 
-  // ── Mapa Mental ──────────────────────────────────────────────────────────
+  //  Mapa Mental 
   viewMindMap:        (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
   createNode:         (u: AppUser | null) => hasMinRole(u, 'Editor'),
   editNode:           (u: AppUser | null) => hasMinRole(u, 'Editor'),
@@ -50,8 +50,9 @@ export const can = {
   importWithAI:       (u: AppUser | null) => hasMinRole(u, 'Editor'),
   exportMap:          (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
   manageWorkflow:     (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  saveVersion:        (u: AppUser | null) => hasMinRole(u, 'Editor'),
 
-  // ── Tarefas ───────────────────────────────────────────────────────────────
+  //  Tarefas 
   viewTasks:          (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
   createTask:         (u: AppUser | null) => hasMinRole(u, 'Editor'),
   editTask:           (u: AppUser | null) => hasMinRole(u, 'Editor'),
@@ -66,7 +67,7 @@ export const can = {
   viewPrivateTasks:   (u: AppUser | null) => hasMinRole(u, 'Gerente'),
   generateMinutes:    (u: AppUser | null) => hasMinRole(u, 'Gerente'),
 
-  // ── Usuários & Configurações ─────────────────────────────────────────────
+  //  Usuários & Configurações 
   viewSettings:       (u: AppUser | null) => hasMinRole(u, 'Gerente'),
   manageUsers:        (u: AppUser | null) => hasMinRole(u, 'Administrador'),
   createUser:         (u: AppUser | null) => hasMinRole(u, 'Administrador'),
@@ -76,25 +77,39 @@ export const can = {
   manageDepartments:  (u: AppUser | null) => hasMinRole(u, 'Administrador'),
   manageRoles:        (u: AppUser | null) => hasMinRole(u, 'Administrador'),
 
-  // ── Auditoria & Logs ─────────────────────────────────────────────────────
+  //  Auditoria & Logs 
   viewAuditLog:       (u: AppUser | null) => hasMinRole(u, 'Administrador'),
   exportAuditLog:     (u: AppUser | null) => hasMinRole(u, 'Administrador'),
   clearAuditLog:      (u: AppUser | null) => u?.role === 'Administrador',
 
-  // ── Analytics ────────────────────────────────────────────────────────────
+  //  Analytics 
   viewAnalytics:      (u: AppUser | null) => hasMinRole(u, 'Gerente'),
   viewFullAnalytics:  (u: AppUser | null) => hasMinRole(u, 'Administrador'),
 
-  // ── Documentos ───────────────────────────────────────────────────────────
+  //  Documentos 
   viewDocuments:      (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
   uploadDocument:     (u: AppUser | null) => hasMinRole(u, 'Editor'),
   deleteDocument:     (u: AppUser | null) => hasMinRole(u, 'Gerente'),
 
-  // ── Modo Operador ─────────────────────────────────────────────────────────
+  //  Modo Operador 
   viewOperatorMode:   (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
+
+  //  Avaliações / Assessments 
+  viewAssessments:    (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
+  takeAssessment:     (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
+  createAssessment:   (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  editAssessment:     (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  deleteAssessment:   (u: AppUser | null) => hasMinRole(u, 'Administrador'),
+  publishAssessment:  (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  manageQuestions:    (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  viewAllAttempts:    (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  viewAssessmentAnalytics: (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  viewOwnAchievements: (u: AppUser | null) => hasMinRole(u, 'Visualizador'),
+  viewAllAchievements: (u: AppUser | null) => hasMinRole(u, 'Gerente'),
+  generateCertificate: (u: AppUser | null) => hasMinRole(u, 'Gerente'),
 };
 
-// ─── Descrição dos níveis para UI ─────────────────────────────────────────
+// --- Descrio dos nveis para UI -----------------------------------------
 export const ROLE_DEFINITIONS: Record<UserRole, { label: string; description: string; color: string; badge: string; permissions: string[] }> = {
   Administrador: {
     label: 'Administrador',
@@ -121,14 +136,14 @@ export const ROLE_DEFINITIONS: Record<UserRole, { label: string; description: st
       'Aprovar e mover tarefas de qualquer membro',
       'Atribuir tarefas a usuários',
       'Excluir tarefas (do departamento)',
-      'Gerar atas de reunião',
+      'Gerar atas de reunio',
       'Ver analytics e relatórios',
       'Gerenciar documentos',
     ],
   },
   Editor: {
     label: 'Editor',
-    description: 'Cria e edita tarefas e conteúdo próprio. Não pode excluir nem aprovar.',
+    description: 'Cria e edita tarefas e contedo prprio. Não pode excluir nem aprovar.',
     color: 'text-blue-400',
     badge: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
     permissions: [
@@ -143,20 +158,20 @@ export const ROLE_DEFINITIONS: Record<UserRole, { label: string; description: st
   },
   Visualizador: {
     label: 'Visualizador',
-    description: 'Apenas leitura. Não pode criar, editar ou excluir nenhum conteúdo.',
+    description: 'Apenas leitura. Não pode criar, editar ou excluir nenhum contedo.',
     color: 'text-slate-400',
     badge: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
     permissions: [
       'Visualizar mapas mentais e processos',
       'Visualizar tarefas públicas',
       'Exportar mapas (somente leitura)',
-      'Modo operador (apresentação)',
+      'Modo operador (apresentao)',
       'Visualizar documentos',
     ],
   },
 };
 
-// ─── Hook helper ────────────────────────────────────────────────────────────
+//  Hook helper 
 export function usePermissions(currentUser: AppUser | null) {
   return {
     can: Object.fromEntries(

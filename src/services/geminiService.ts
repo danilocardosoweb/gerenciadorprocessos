@@ -48,9 +48,9 @@ INSTRUÇÕES:
 2. Organize o conteúdo nas seguintes categorias principais:
    - inputs (Entradas)
    - outputs (Saídas)
-   - resources (Recursos / Com o quê?)
+   - resources (Recursos / Com o quê)
    - people (Pessoas / Quem?)
-   - methods (Métodos / Como?)
+   - methods (Métodos / Como)
    - kpis (Indicadores / Medições)
    - safety (Segurança do Trabalho)
    - quality (Controle de Qualidade)
@@ -75,11 +75,11 @@ IMPORTANTE:
 - Retorne APENAS JSON válido, sem texto adicional
 - Use ids únicos e descritivos
 - Mantenha a estrutura hierárquica clara
-- As posições (x, y) podem ser 0,0 pois serão calculadas pelo layout automático`;
+- As posições (x, y) podem ser 0,0 pois serão calculadas pelo layout automtico`;
 
   try {
     if (!apiKey) {
-      throw new Error('VITE_GEMINI_API_KEY não configurada no .env');
+      throw new Error('VITE_GEMINI_API_KEY no configurada no .env');
     }
 
     const response = await fetch(
@@ -124,7 +124,7 @@ IMPORTANTE:
     const jsonStr = jsonMatch[1] || jsonMatch[0];
     const generatedMap: GeneratedMap = JSON.parse(jsonStr);
 
-    // Validação básica
+    // Validao bsica
     if (!generatedMap.nodes || !generatedMap.edges) {
       throw new Error('Invalid map structure: missing nodes or edges');
     }
@@ -138,64 +138,64 @@ IMPORTANTE:
 
 // Hardcoded Corte em Serras map for reliability
 export function getCorteSerrasMindMapHardcoded(): GeneratedMap {
-  const title = "Operação de Corte em Serras - Controle de Qualidade";
+  const title = "Operao de Corte em Serras - Controle de Qualidade";
   
   const nodes = [
     // Root
-    { id: "root", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Operação de Corte em Serras", nodeType: "root", category: "root", numberCode: "1.0" } },
+    { id: "root", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Operao de Corte em Serras", nodeType: "root", category: "root", numberCode: "1.0" } },
     
     // ENTRADAS
     { id: "in_material", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Material a Ser Cortado (Perfil/Alumínio/Aço)", nodeType: "inputs", category: "inputs", numberCode: "2.0" } },
     { id: "in_op", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Ordem de Produção (OP) - Documento Principal", nodeType: "inputs", category: "inputs", numberCode: "2.1" } },
     { id: "in_desenho", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Desenho Técnico do Corte - Especificações", nodeType: "inputs", category: "inputs", numberCode: "2.2" } },
     
-    // ETAPA 1: PREPARAÇÃO
-    { id: "e1_lamina", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Lâmina de Serra - Seleção e Inspeção", nodeType: "methods", category: "methods", numberCode: "3.0" } },
-    { id: "e1_coolant", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Sistema de Coolant - Refrigeração/Lubrificação", nodeType: "methods", category: "methods", numberCode: "3.1" } },
-    { id: "e1_calibracao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Calibração do Stop de Medida - Precisão", nodeType: "methods", category: "methods", numberCode: "3.2" } },
-    { id: "e1_limpeza", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Limpeza da Máquina - Preparação", nodeType: "methods", category: "methods", numberCode: "3.3" } },
+    // ETAPA 1: PREPARAO
+    { id: "e1_lamina", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Lmina de Serra - Seleo e Inspeo", nodeType: "methods", category: "methods", numberCode: "3.0" } },
+    { id: "e1_coolant", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Sistema de Coolant - Refrigerao/Lubrificao", nodeType: "methods", category: "methods", numberCode: "3.1" } },
+    { id: "e1_calibracao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Calibrao do Stop de Medida - Preciso", nodeType: "methods", category: "methods", numberCode: "3.2" } },
+    { id: "e1_limpeza", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Limpeza da Mquina - Preparao", nodeType: "methods", category: "methods", numberCode: "3.3" } },
     
     // ETAPA 2: SETUP
     { id: "e2_medicao_material", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Medição do Material Inicial - Conferência", nodeType: "methods", category: "methods", numberCode: "4.0" } },
-    { id: "e2_setup_stop", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Ajuste do Stop de Medida - Configuração", nodeType: "methods", category: "methods", numberCode: "4.1" } },
-    { id: "e2_primeira_peca", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Corte da Peça Piloto - Validação Inicial", nodeType: "methods", category: "methods", numberCode: "4.2" } },
+    { id: "e2_setup_stop", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Ajuste do Stop de Medida - Configurao", nodeType: "methods", category: "methods", numberCode: "4.1" } },
+    { id: "e2_primeira_peca", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Corte da Pea Piloto - Validao Inicial", nodeType: "methods", category: "methods", numberCode: "4.2" } },
     
-    // ETAPA 3: INSPEÇÃO PILOTO (QUALITY)
+    // ETAPA 3: INSPEO PILOTO (QUALITY)
     { id: "e3_medicao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Medição Dimensional Completa - Paquímetro/Trena", nodeType: "quality", category: "quality", numberCode: "5.0" } },
-    { id: "e3_visual", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Inspeção Visual da Qualidade - Rebarbas/Acabamento", nodeType: "quality", category: "quality", numberCode: "5.1" } },
-    { id: "e3_tolerancias", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Análise de Tolerâncias - ±0.5mm ou ±0.2mm", nodeType: "quality", category: "quality", numberCode: "5.2" } },
-    { id: "e3_aprovacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Aprovação da Peça Piloto - Liberação", nodeType: "quality", category: "quality", numberCode: "5.3" } },
+    { id: "e3_visual", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Inspeo Visual da Qualidade - Rebarbas/Acabamento", nodeType: "quality", category: "quality", numberCode: "5.1" } },
+    { id: "e3_tolerancias", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Anlise de Tolerncias - 0.5mm ou 0.2mm", nodeType: "quality", category: "quality", numberCode: "5.2" } },
+    { id: "e3_aprovacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Aprovação da Pea Piloto - Liberação", nodeType: "quality", category: "quality", numberCode: "5.3" } },
     
-    // ETAPA 4: PRODUÇÃO
-    { id: "e4_corte", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Corte Contínuo Monitorado - Produção", nodeType: "methods", category: "methods", numberCode: "6.0" } },
-    { id: "e4_monitoramento", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Monitoramento de Qualidade - Observação Constante", nodeType: "methods", category: "methods", numberCode: "6.1" } },
-    { id: "e4_lubrificacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Controle de Lubrificação - Coolant Durante Corte", nodeType: "methods", category: "methods", numberCode: "6.2" } },
+    // ETAPA 4: PRODUO
+    { id: "e4_corte", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Corte Contnuo Monitorado - Produção", nodeType: "methods", category: "methods", numberCode: "6.0" } },
+    { id: "e4_monitoramento", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Monitoramento de Qualidade - Observao Constante", nodeType: "methods", category: "methods", numberCode: "6.1" } },
+    { id: "e4_lubrificacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Controle de Lubrificao - Coolant Durante Corte", nodeType: "methods", category: "methods", numberCode: "6.2" } },
     
-    // ETAPA 5: INSPEÇÃO DURANTE PRODUÇÃO
+    // ETAPA 5: INSPEO DURANTE PRODUO
     { id: "e5_amostragem", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Amostragem Dimensional - Cada 10 Peças", nodeType: "quality", category: "quality", numberCode: "7.0" } },
-    { id: "e5_visual_continua", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Inspeção Visual Contínua - 100% ou Amostral", nodeType: "quality", category: "quality", numberCode: "7.1" } },
+    { id: "e5_visual_continua", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Inspeo Visual Contnua - 100% ou Amostral", nodeType: "quality", category: "quality", numberCode: "7.1" } },
     { id: "e5_conferencia_op", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Conferência com OP - Rastreabilidade", nodeType: "quality", category: "quality", numberCode: "7.2" } },
     
     // ETAPA 6: ACABAMENTO
     { id: "e6_desbarbar", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Desbaste de Rebarbas - Acabamento", nodeType: "methods", category: "methods", numberCode: "8.0" } },
     { id: "e6_limpeza_pecas", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Limpeza das Peças - Pós-Corte", nodeType: "methods", category: "methods", numberCode: "8.1" } },
-    { id: "e6_identificacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Identificação das Peças - Rastreabilidade", nodeType: "methods", category: "methods", numberCode: "8.2" } },
-    { id: "e6_organizacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Organização para Próxima Etapa - Armazenamento", nodeType: "methods", category: "methods", numberCode: "8.3" } },
+    { id: "e6_identificacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Identificao das Peas - Rastreabilidade", nodeType: "methods", category: "methods", numberCode: "8.2" } },
+    { id: "e6_organizacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Organizao para Prxima Etapa - Armazenamento", nodeType: "methods", category: "methods", numberCode: "8.3" } },
     
-    // ETAPA 7: INSPEÇÃO FINAL
-    { id: "e7_inspe_final", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Inspeção Final 100% ou Amostral - Validação", nodeType: "quality", category: "quality", numberCode: "9.0" } },
-    { id: "e7_ficha", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Ficha de Inspeção Preenchida - Documentação", nodeType: "quality", category: "quality", numberCode: "9.1" } },
-    { id: "e7_liberacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Liberação para Próxima Etapa - Aprovação", nodeType: "quality", category: "quality", numberCode: "9.2" } },
+    // ETAPA 7: INSPEO FINAL
+    { id: "e7_inspe_final", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Inspeo Final 100% ou Amostral - Validao", nodeType: "quality", category: "quality", numberCode: "9.0" } },
+    { id: "e7_ficha", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Ficha de Inspeo Preenchida - Documentao", nodeType: "quality", category: "quality", numberCode: "9.1" } },
+    { id: "e7_liberacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Liberação para Prxima Etapa - Aprovação", nodeType: "quality", category: "quality", numberCode: "9.2" } },
     
     // SEGURANÇA
-    { id: "seg_epi", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Uso de EPIs - Óculos, Luvas, Protetor Auricular", nodeType: "safety", category: "safety", numberCode: "10.0" } },
+    { id: "seg_epi", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Uso de EPIs - óculos, Luvas, Protetor Auricular", nodeType: "safety", category: "safety", numberCode: "10.0" } },
     { id: "seg_protecao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Proteções da Máquina - Guardas e Emergência", nodeType: "safety", category: "safety", numberCode: "10.1" } },
     { id: "seg_manuseio", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Manuseio Seguro de Materiais Longos - Ergonomia", nodeType: "safety", category: "safety", numberCode: "10.2" } },
     
     // IATF/QUALIDADE
-    { id: "iatf_rastreabilidade", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Rastreabilidade do Lote - Identificação", nodeType: "compliance", category: "compliance", numberCode: "11.0" } },
+    { id: "iatf_rastreabilidade", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Rastreabilidade do Lote - Identificao", nodeType: "compliance", category: "compliance", numberCode: "11.0" } },
     { id: "iatf_spc", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Controle Estatístico do Processo (SPC) - Cp/Cpk", nodeType: "compliance", category: "compliance", numberCode: "11.1" } },
-    { id: "iatf_instrucao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Instrução de Trabalho Atualizada - Procedimento", nodeType: "compliance", category: "compliance", numberCode: "11.2" } },
+    { id: "iatf_instrucao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Instruo de Trabalho Atualizada - Procedimento", nodeType: "compliance", category: "compliance", numberCode: "11.2" } },
     
     // KPIs
     { id: "kpi_cpk", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Cpk (Capacidade do Processo) - Índice", nodeType: "kpis", category: "kpis", numberCode: "12.0" } },
@@ -205,7 +205,7 @@ export function getCorteSerrasMindMapHardcoded(): GeneratedMap {
     
     // SAÍDAS
     { id: "out_pecas", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Peças Cortadas Aprovadas - Produto", nodeType: "outputs", category: "outputs", numberCode: "13.0" } },
-    { id: "out_documentacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Documentação de Qualidade - Registros", nodeType: "outputs", category: "outputs", numberCode: "13.1" } },
+    { id: "out_documentacao", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Documentao de Qualidade - Registros", nodeType: "outputs", category: "outputs", numberCode: "13.1" } },
     { id: "out_rebarbas", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Aparas para Reciclagem - Resíduos", nodeType: "outputs", category: "outputs", numberCode: "13.2" } },
     { id: "out_maquina", type: "mindmap", position: { x: 0, y: 0 }, data: { label: "Máquina Liberada - Status", nodeType: "outputs", category: "outputs", numberCode: "13.3" } },
   ];
@@ -343,8 +343,8 @@ export async function extractTextFromFile(file: File): Promise<string> {
 
   // DOC (old format) - not supported natively
   if (fileName.endsWith('.doc')) {
-    throw new Error('Formato .doc antigo não suportado. Salve como .docx ou .txt e tente novamente.');
+    throw new Error('Formato .doc antigo no suportado. Salve como .docx ou .txt e tente novamente.');
   }
 
-  throw new Error('Formato de arquivo não suportado. Use .pdf, .docx ou .txt, ou cole o texto manualmente.');
+  throw new Error('Formato de arquivo no suportado. Use .pdf, .docx ou .txt, ou cole o texto manualmente.');
 }

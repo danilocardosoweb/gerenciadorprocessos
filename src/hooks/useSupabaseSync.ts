@@ -143,7 +143,7 @@ export function useSupabaseSync() {
         newQueue[itemIndex].synced = true;
         successCount++;
       } else if (itemIndex !== -1) {
-        newQueue[itemIndex].error = 'Falha na sincronização';
+        newQueue[itemIndex].error = 'Falha na sincronizao';
       }
     }
 

@@ -6,7 +6,7 @@ import { generateMindMapFromText, extractTextFromFile, GeneratedMap } from '../s
 
 interface AiImportModalProps {
   onClose: () => void;
-  onImport: (data: { title: string; description: string; type: 'map', nodes?: any[], edges?: any[] }) => void;
+  onImport: (data: { title: string; description: string; type: 'map', nodes: any[], edges: any[], nodeDetails: Record<string, any> }) => void;
 }
 
 export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
@@ -91,7 +91,8 @@ export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
       description: 'Mapa de processos extraído automaticamente do documento através da nossa inteligência artificial.',
       type: 'map',
       nodes: generatedMap.nodes,
-      edges: generatedMap.edges
+      edges: generatedMap.edges,
+      nodeDetails: {}
     });
     onClose();
   };
@@ -328,7 +329,7 @@ export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
                       ['generating', 'done'].includes(analyzingState) ? "text-emerald-400" : 
                       analyzingState === 'analyzing' ? "text-white" : 
                       "text-slate-500"
-                    )}>Compreensão semântica (NLP)</span>
+                    )}>Compreenso semntica (NLP)</span>
                   </div>
 
                   <div className="flex items-center gap-4">
@@ -345,7 +346,7 @@ export function AiImportModal({ onClose, onImport }: AiImportModalProps) {
                       analyzingState === 'done' ? "text-emerald-400" : 
                       analyzingState === 'generating' ? "text-white" : 
                       "text-slate-500"
-                    )}>Geração do fluxograma (Nós e Arestas)</span>
+                    )}>Gerao do fluxograma (Ns e Arestas)</span>
                   </div>
                 </div>
 

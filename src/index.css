@@ -115,9 +115,66 @@ html.light .bg-slate-900\/50 {
 html.light .bg-blue-600\/20  { background-color: var(--orb1) !important; }
 html.light .bg-indigo-600\/20 { background-color: var(--orb2) !important; }
 
+/* Smart connection edges */
+.tecm-connection-edge {
+  transition:
+    stroke 220ms ease,
+    opacity 220ms ease,
+    filter 220ms ease,
+    stroke-width 220ms ease;
+}
+
+.tecm-connection-edge--dashed,
+.tecm-connection-edge--dotted,
+.tecm-connection-edge--pulsing {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tecm-connection-edge--active {
+  filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.45));
+  will-change: filter, stroke-width;
+}
+
+.tecm-connection-edge--hovered {
+  filter: drop-shadow(0 0 18px rgba(167, 139, 250, 0.55));
+  will-change: filter, stroke-width;
+}
+
+.tecm-connection-edge--pulsing {
+  will-change: opacity, stroke-dashoffset;
+}
+
+@keyframes connection-flow {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -72;
+  }
+}
+
+@keyframes connection-pulse {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tecm-connection-edge,
+  .tecm-connection-edge--pulsing {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Backdrop blur overlays */
 html.light .bg-\[\#0f172a\]\/80,
-html.light .bg-\[#0a1120\]\/85 {
+html.light .bg-\[\#0a1120\]\/85 {
   background-color: rgba(15,23,42,0.6) !important;
 }
 

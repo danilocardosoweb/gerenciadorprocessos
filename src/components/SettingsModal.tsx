@@ -1,13 +1,15 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Users, Shield, Settings, Plus, Search, Check, ChevronRight, Edit2, Trash2, ArrowLeft, Save, FileText, Download, Trash, Filter, ClipboardList, Building2, Eye, Folder } from 'lucide-react';
+import { X, Users, Shield, Settings, Plus, Search, Check, ChevronRight, Edit2, Trash2, ArrowLeft, Save, FileText, Download, Trash, Filter, ClipboardList, Building2, Eye, Folder, BarChart3, Trophy, Unlock, UserCheck, UserX, RefreshCw, AlertTriangle, Target, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Preferences } from '../hooks/usePreferences';
 import { useAuditLog } from '../hooks/useAuditLog';
 import { useUsers } from '../hooks/useUsers';
 import { ConfirmModal } from './ConfirmModal';
+import { GamificationSettingsPanel } from './GamificationSettingsPanel';
 import { ROLE_DEFINITIONS, can, type UserRole } from '../lib/permissions';
+import { supabase } from '../lib/supabase';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -33,11 +35,39 @@ type User = { id: number; name: string; email: string; password?: string; role: 
 type Role = { id: number; name: string; desc: string; users: number };
 
 type Department = { id: string; name: string; description?: string; color: string; icon: string; isDefault?: boolean };
+type SettingsTab = 'users' | 'performance' | 'roles' | 'departments' | 'preferences' | 'gamification' | 'audit';
+type PerformanceRisk = 'excellent' | 'good' | 'attention' | 'blocked' | 'no_data' | 'inactive';
+type PerformanceRow = {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  status: 'Ativo' | 'Inativo';
+  totalAttempts: number;
+  completedAttempts: number;
+  averageScore: number;
+  passRate: number;
+  totalXp: number;
+  level: number;
+  badges: number;
+  certificates: number;
+  activeLocks: number;
+  lastActivity: string;
+  risk: PerformanceRisk;
+  recommendedAction: string;
+};
 
 export function SettingsModal({ onClose, preferences: externalPreferences, setPreferences: externalSetPreferences, currentUser, enableAuditLog }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'departments' | 'preferences' | 'audit'>('users');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('users');
   const [activeView, setActiveView] = useState<'list' | 'add_user' | 'edit_user' | 'add_role' | 'edit_role' | 'add_department' | 'edit_department'>('list');
   const [searchQuery, setSearchQuery] = useState('');
+  const [performanceRows, setPerformanceRows] = useState<PerformanceRow[]>([]);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [performanceError, setPerformanceError] = useState<string | null>(null);
+  const [performanceFilter, setPerformanceFilter] = useState<'all' | PerformanceRisk>('all');
+  const [selectedPerformanceUserId, setSelectedPerformanceUserId] = useState<string | null>(null);
+  const [performanceNotice, setPerformanceNotice] = useState<string | null>(null);
   
   // Audit Log
   const { logs, clearLogs, downloadTxt, downloadJson, filterLogs, totalCount } = useAuditLog(enableAuditLog ?? true);
@@ -79,6 +109,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
     sessionTimeout: 30,
     enableAuditLog: true,
     defaultMapLayout: 'LR',
+    connectionTheme: 'industrialIATF',
   });
 
   const preferences = externalPreferences || localPreferences;
@@ -123,7 +154,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
 
   const isAdmin = currentUser?.role === 'Administrador';
 
-  const handleTabChange = (tab: 'users' | 'roles' | 'departments' | 'preferences' | 'audit') => {
+  const handleTabChange = (tab: SettingsTab) => {
     setActiveTab(tab);
     setActiveView('list');
   };
@@ -160,7 +191,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   const handleDeleteUser = async (id: string, roleName: string) => {
     setConfirmState({
       title: 'Remover Usuário',
-      message: 'Tem certeza que deseja remover este usuário permanentemente? Esta ação não pode ser desfeita.',
+      message: 'Tem certeza que deseja remover este usuário permanentemente Esta ação não pode ser desfeita.',
       type: 'danger',
       onConfirm: async () => {
         const result = await deleteUser(id.toString());
@@ -199,7 +230,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   const handleDeleteRole = (id: number) => {
     setConfirmState({
       title: 'Remover Nível de Acesso',
-      message: 'Tem certeza que deseja remover este nível de acesso? Usuários com este nível poderão perder permissões.',
+      message: 'Tem certeza que deseja remover este nível de acesso Usuários com este nível poderão perder permissões.',
       type: 'warning',
       onConfirm: () => setRoles(roles.filter(r => r.id !== id)),
     });
@@ -213,6 +244,205 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
   };
 
   const filteredUsers = users.filter(u => (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const getAttemptPassingScore = (attempt: any) => attempt.assessments?.passing_score ?? 70;
+  const getAttemptDate = (attempt: any) => attempt.completed_at || attempt.started_at || attempt.created_at;
+
+  const loadPerformanceData = useCallback(async () => {
+    if (!isAdmin) return;
+    setPerformanceLoading(true);
+    setPerformanceError(null);
+
+    try {
+      const [
+        attemptsResult,
+        achievementsResult,
+        badgesResult,
+        certificatesResult,
+        locksResult,
+      ] = await Promise.all([
+        supabase.from('assessment_attempts').select('*, assessments(title, passing_score)').order('started_at', { ascending: false }),
+        supabase.from('user_achievements').select('*'),
+        supabase.from('user_badges').select('*'),
+        supabase.from('assessment_certificates').select('*'),
+        supabase.from('assessment_attempt_locks').select('*'),
+      ]);
+
+      const firstError = attemptsResult.error || achievementsResult.error || badgesResult.error || certificatesResult.error || locksResult.error;
+      if (firstError) throw firstError;
+
+      const attempts = attemptsResult.data || [];
+      const achievements = achievementsResult.data || [];
+      const badges = badgesResult.data || [];
+      const certificates = certificatesResult.data || [];
+      const locks = locksResult.data || [];
+      const now = new Date();
+
+      const rows = users.map((user: any): PerformanceRow => {
+        const userAttempts = attempts.filter((attempt: any) => attempt.user_id === user.id);
+        const completed = userAttempts.filter((attempt: any) => attempt.status === 'completed' || attempt.score !== null);
+        const passed = completed.filter((attempt: any) => (attempt.score || 0) >= getAttemptPassingScore(attempt));
+        const averageScore = completed.length ?
+           Math.round(completed.reduce((sum: number, attempt: any) => sum + (attempt.score || 0), 0) / completed.length)
+          : 0;
+        const passRate = completed.length ? Math.round((passed.length / completed.length) * 100) : 0;
+        const userAchievement = achievements.find((item: any) => item.user_id === user.id);
+        const totalXp = userAchievement?.total_xp || completed.reduce((sum: number, attempt: any) => sum + (attempt.xp_earned || 0), 0);
+        const level = userAchievement?.current_level || Math.max(1, Math.floor(Math.sqrt(totalXp / 100)));
+        const activeLocks = locks.filter((lock: any) => lock.user_id === user.id && lock.blocked_until && new Date(lock.blocked_until) > now).length;
+        const lastActivity = completed
+          .map((attempt: any) => getAttemptDate(attempt))
+          .filter(Boolean)
+          .sort()
+          .reverse()[0];
+
+        let risk: PerformanceRisk = 'good';
+        let recommendedAction = 'Manter acompanhamento normal e incentivar próxima trilha.';
+        if (user.status === 'Inativo') {
+          risk = 'inactive';
+          recommendedAction = 'Usuário inativo. Reativar somente se ele precisar voltar a acessar o sistema.';
+        } else if (activeLocks > 0) {
+          risk = 'blocked';
+          recommendedAction = 'Usuário bloqueado por tentativas. Recomende revisão do mapa antes de liberar nova tentativa.';
+        } else if (completed.length === 0) {
+          risk = 'no_data';
+          recommendedAction = 'Ainda não realizou avaliações. Oriente a iniciar pelo nível iniciante.';
+        } else if (averageScore < 70 || passRate < 70) {
+          risk = 'attention';
+          recommendedAction = 'Reforçar treinamento, revisar pontos errados e liberar nova tentativa após estudo.';
+        } else if (averageScore >= 90 && passRate >= 90) {
+          risk = 'excellent';
+          recommendedAction = 'Bom candidato para níveis avançados, multiplicador interno ou reconhecimento.';
+        }
+
+        return {
+          userId: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          department: user.department,
+          status: user.status || 'Ativo',
+          totalAttempts: userAttempts.length,
+          completedAttempts: completed.length,
+          averageScore,
+          passRate,
+          totalXp,
+          level,
+          badges: badges.filter((badge: any) => badge.user_id === user.id).length,
+          certificates: certificates.filter((cert: any) => cert.user_id === user.id).length,
+          activeLocks,
+          lastActivity,
+          risk,
+          recommendedAction,
+        };
+      });
+
+      setPerformanceRows(rows.sort((a, b) => b.totalXp - a.totalXp || b.averageScore - a.averageScore));
+    } catch (err: any) {
+      console.error('Erro ao carregar desempenho:', err);
+      setPerformanceError(err.message || 'Não foi possível carregar o desempenho dos usuários.');
+    } finally {
+      setPerformanceLoading(false);
+    }
+  }, [isAdmin, users]);
+
+  useEffect(() => {
+    if (activeTab === 'performance') {
+      loadPerformanceData();
+    }
+  }, [activeTab, loadPerformanceData]);
+
+  const filteredPerformanceRows = performanceRows.filter((row) => {
+    const matchesSearch = `${row.name} ${row.email} ${row.department || ''}`.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRisk = performanceFilter === 'all' || row.risk === performanceFilter;
+    return matchesSearch && matchesRisk;
+  });
+
+  const performanceStats = {
+    users: performanceRows.length,
+    averageScore: performanceRows.filter(row => row.completedAttempts > 0).length ?
+       Math.round(performanceRows.filter(row => row.completedAttempts > 0).reduce((sum, row) => sum + row.averageScore, 0) / performanceRows.filter(row => row.completedAttempts > 0).length)
+      : 0,
+    blocked: performanceRows.filter(row => row.activeLocks > 0).length,
+    attention: performanceRows.filter(row => row.risk === 'attention' || row.risk === 'blocked').length,
+    certificates: performanceRows.reduce((sum, row) => sum + row.certificates, 0),
+  };
+
+  const selectedPerformanceUser = performanceRows.find(row => row.userId === selectedPerformanceUserId) || null;
+
+  const riskConfig: Record<PerformanceRisk, { label: string; className: string }> = {
+    excellent: { label: 'Excelente', className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' },
+    good: { label: 'Em evolução', className: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
+    attention: { label: 'Atenção', className: 'bg-amber-500/10 text-amber-300 border-amber-500/30' },
+    blocked: { label: 'Bloqueado', className: 'bg-red-500/10 text-red-300 border-red-500/30' },
+    no_data: { label: 'Sem avaliação', className: 'bg-slate-500/10 text-slate-300 border-slate-500/30' },
+    inactive: { label: 'Inativo', className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30' },
+  };
+
+  const clearUserLocks = (row: PerformanceRow) => {
+    setConfirmState({
+      title: 'Liberar tentativas',
+      message: `Deseja remover os bloqueios de avaliação de ${row.name} Use esta ação apenas quando o líder já orientou o operador a revisar o conteúdo.`,
+      type: 'warning',
+      onConfirm: async () => {
+        const { error } = await supabase.from('assessment_attempt_locks').delete().eq('user_id', row.userId);
+        if (error) {
+          setPerformanceNotice(`Erro ao liberar bloqueios: ${error.message}`);
+          return;
+        }
+        setPerformanceNotice(`Bloqueios de ${row.name} liberados.`);
+        loadPerformanceData();
+      },
+    });
+  };
+
+  const toggleUserStatus = (row: PerformanceRow) => {
+    const nextStatus = row.status === 'Ativo' ? 'Inativo' : 'Ativo';
+    setConfirmState({
+      title: `${nextStatus === 'Ativo' ? 'Reativar' : 'Inativar'} usuário`,
+      message: `Deseja alterar o status de ${row.name} para ${nextStatus}`,
+      type: nextStatus === 'Ativo' ? 'warning' : 'danger',
+      onConfirm: async () => {
+        const result = await updateUser(row.userId, { status: nextStatus });
+        if (!result.success) {
+          setPerformanceNotice(`Erro ao alterar status: ${result.error}`);
+          return;
+        }
+        setPerformanceNotice(`${row.name} agora está ${nextStatus}.`);
+        refetchUsers();
+        loadPerformanceData();
+      },
+    });
+  };
+
+  const exportPerformanceCsv = () => {
+    const header = ['Nome', 'Email', 'Departamento', 'Status', 'Tentativas', 'Média', 'Aprovação', 'XP', 'Nível', 'Selos', 'Certificados', 'Risco', 'Recomendação'];
+    const lines = filteredPerformanceRows.map(row => [
+      row.name,
+      row.email,
+      row.department || '',
+      row.status,
+      row.completedAttempts,
+      `${row.averageScore}%`,
+      `${row.passRate}%`,
+      row.totalXp,
+      row.level,
+      row.badges,
+      row.certificates,
+      riskConfig[row.risk].label,
+      row.recommendedAction,
+    ]);
+    const csv = [header, ...lines]
+      .map(line => line.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `desempenho-usuarios-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <>
@@ -231,7 +461,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
         exit={{ opacity: 0, y: 40 }}
         className="relative w-full sm:max-w-6xl h-[92vh] sm:h-[85vh] bg-[#1e293b]/95 backdrop-blur-xl border border-white/10 sm:rounded-3xl rounded-t-3xl overflow-hidden flex flex-col sm:flex-row shadow-2xl shadow-blue-900/20"
       >
-        {/* ── Mobile top header ── */}
+        {/* -- Mobile top header -- */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 sm:hidden shrink-0">
           <h2 className="text-base font-bold text-white">Ajustes</h2>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors">
@@ -239,13 +469,15 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
           </button>
         </div>
 
-        {/* ── Mobile tab bar (horizontal scroll) ── */}
+        {/* -- Mobile tab bar (horizontal scroll) -- */}
         <div className="flex sm:hidden shrink-0 overflow-x-auto border-b border-white/10 bg-slate-900/60 px-2 gap-1 py-2">
           {[
-            { id: 'users',       icon: Users,        label: 'Usuários' },
+            { id: 'users',       icon: Users,        label: 'Usu\u00e1rios' },
+            ...(isAdmin ? [{ id: 'performance', icon: BarChart3, label: 'Desemp.' }] : []),
             { id: 'roles',       icon: Shield,       label: 'Acesso' },
             { id: 'departments', icon: Building2,    label: 'Depto' },
             { id: 'preferences', icon: Settings,     label: 'Prefer.' },
+            ...(isAdmin ? [{ id: 'gamification', icon: Trophy, label: 'Selos' }] : []),
             ...(isAdmin ? [{ id: 'audit', icon: ClipboardList, label: 'Auditoria' }] : []),
           ].map(({ id, icon: Icon, label }) => (
             <button
@@ -253,8 +485,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
               onClick={() => handleTabChange(id as typeof activeTab)}
               className={cn(
                 'shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[10px] font-bold transition-all',
-                activeTab === id
-                  ? 'bg-blue-600 text-white'
+                activeTab === id ? 'bg-blue-600 text-white'
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               )}
             >
@@ -264,24 +495,39 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
           ))}
         </div>
 
-        {/* ── Desktop Sidebar ── */}
+        {/* -- Desktop Sidebar -- */}
         <div className="hidden sm:flex w-56 lg:w-64 bg-slate-900/50 border-r border-white/5 p-5 flex-col pt-8 shrink-0">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-bold text-white tracking-tight">Ajustes</h2>
           </div>
           <div className="flex flex-col gap-1.5">
             <button onClick={() => handleTabChange('users')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'users' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
-              <Users size={17} /> Usuários
+              <Users size={17} /> {'Usu\u00e1rios'}
             </button>
+            {isAdmin && (
+              <button onClick={() => handleTabChange('performance')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'performance' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
+                <BarChart3 size={17} /> Desempenho
+                {performanceStats.attention > 0 && (
+                  <span className="ml-auto px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-full text-[9px] font-bold border border-amber-500/20">
+                    {performanceStats.attention}
+                  </span>
+                )}
+              </button>
+            )}
             <button onClick={() => handleTabChange('roles')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'roles' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
-              <Shield size={17} /> Níveis de Acesso
+              <Shield size={17} /> {'N\u00edveis de Acesso'}
             </button>
             <button onClick={() => handleTabChange('departments')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'departments' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
               <Building2 size={17} /> Departamentos
             </button>
             <button onClick={() => handleTabChange('preferences')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'preferences' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
-              <Settings size={17} /> Preferências
+              <Settings size={17} /> {'Prefer\u00eancias'}
             </button>
+            {isAdmin && (
+              <button onClick={() => handleTabChange('gamification')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'gamification' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
+                <Trophy size={17} /> Selos e Certificados
+              </button>
+            )}
             {isAdmin && (
               <button onClick={() => handleTabChange('audit')} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all", activeTab === 'audit' ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white hover:bg-white/5")}>
                 <ClipboardList size={17} /> Auditoria
@@ -548,6 +794,260 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                 </motion.div>
               )}
 
+              {activeTab === 'performance' && isAdmin && (
+                <motion.div
+                  key="performance"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="max-w-6xl space-y-5"
+                >
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-3">
+                        <BarChart3 className="text-blue-400" size={26} />
+                        Painel de Desempenho
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                        Acompanhe aprendizagem, bloqueios, certificados e pontos de atenção dos operadores.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={loadPerformanceData}
+                        className="h-10 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-sm font-semibold flex items-center gap-2 transition-colors"
+                      >
+                        <RefreshCw size={16} className={performanceLoading ? 'animate-spin' : ''} />
+                        Atualizar
+                      </button>
+                      <button
+                        onClick={exportPerformanceCsv}
+                        className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold flex items-center gap-2 transition-colors"
+                      >
+                        <Download size={16} />
+                        Exportar CSV
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+                    <div className="bg-blue-500/10 border border-blue-500/25 rounded-2xl p-4">
+                      <Users className="w-5 h-5 text-blue-300 mb-3" />
+                      <div className="text-2xl font-bold text-white">{performanceStats.users}</div>
+                      <div className="text-xs text-slate-400">Usuários monitorados</div>
+                    </div>
+                    <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4">
+                      <Target className="w-5 h-5 text-emerald-300 mb-3" />
+                      <div className="text-2xl font-bold text-white">{performanceStats.averageScore}%</div>
+                      <div className="text-xs text-slate-400">Média geral</div>
+                    </div>
+                    <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-4">
+                      <AlertTriangle className="w-5 h-5 text-amber-300 mb-3" />
+                      <div className="text-2xl font-bold text-white">{performanceStats.attention}</div>
+                      <div className="text-xs text-slate-400">Precisam de ação</div>
+                    </div>
+                    <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-4">
+                      <Unlock className="w-5 h-5 text-red-300 mb-3" />
+                      <div className="text-2xl font-bold text-white">{performanceStats.blocked}</div>
+                      <div className="text-xs text-slate-400">Com bloqueio ativo</div>
+                    </div>
+                    <div className="bg-purple-500/10 border border-purple-500/25 rounded-2xl p-4">
+                      <Trophy className="w-5 h-5 text-purple-300 mb-3" />
+                      <div className="text-2xl font-bold text-white">{performanceStats.certificates}</div>
+                      <div className="text-xs text-slate-400">Certificados emitidos</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+                    <div className="p-4 border-b border-white/5 bg-black/20 flex flex-col lg:flex-row gap-3 lg:items-center">
+                      <div className="relative flex-1 max-w-lg">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          type="text"
+                          autoComplete="off"
+                          placeholder="Buscar operador, e-mail ou departamento..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all text-white placeholder:text-slate-500"
+                        />
+                      </div>
+                      <select
+                        value={performanceFilter}
+                        onChange={(e) => setPerformanceFilter(e.target.value as any)}
+                        className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50"
+                      >
+                        <option value="all" className="bg-slate-800">Todos os status</option>
+                        <option value="attention" className="bg-slate-800">Atenção</option>
+                        <option value="blocked" className="bg-slate-800">Bloqueados</option>
+                        <option value="no_data" className="bg-slate-800">Sem avaliação</option>
+                        <option value="excellent" className="bg-slate-800">Excelente</option>
+                        <option value="inactive" className="bg-slate-800">Inativos</option>
+                      </select>
+                    </div>
+
+                    {performanceNotice && (
+                      <div className="m-4 mb-0 rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-100 flex items-center justify-between gap-3">
+                        <span>{performanceNotice}</span>
+                        <button onClick={() => setPerformanceNotice(null)} className="text-blue-200 hover:text-white">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    )}
+
+                    {performanceError && (
+                      <div className="m-4 mb-0 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                        Erro ao carregar desempenho: {performanceError}
+                      </div>
+                    )}
+
+                    {performanceLoading ? (
+                      <div className="py-16 text-center text-slate-400">
+                        <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin opacity-60" />
+                        Carregando desempenho dos usuários...
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm text-slate-300">
+                          <thead className="text-xs uppercase bg-black/10 text-slate-500 font-semibold tracking-wider">
+                            <tr>
+                              <th className="px-5 py-4 border-b border-white/5">Operador</th>
+                              <th className="px-5 py-4 border-b border-white/5">Aprendizagem</th>
+                              <th className="px-5 py-4 border-b border-white/5">Gamificação</th>
+                              <th className="px-5 py-4 border-b border-white/5">Status</th>
+                              <th className="px-5 py-4 border-b border-white/5 text-right">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredPerformanceRows.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                  Nenhum usuário encontrado para os filtros atuais.
+                                </td>
+                              </tr>
+                            ) : filteredPerformanceRows.map((row) => (
+                              <tr key={row.userId} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
+                                <td className="px-5 py-4 min-w-[240px]">
+                                  <div className="font-semibold text-white">{row.name}</div>
+                                  <div className="text-xs text-slate-500">{row.email}</div>
+                                  <div className="text-xs text-slate-400 mt-1">{row.department || 'Sem departamento'} • {row.role}</div>
+                                </td>
+                                <td className="px-5 py-4 min-w-[220px]">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-16 h-2 rounded-full bg-slate-700 overflow-hidden">
+                                      <div className={cn('h-full rounded-full', row.averageScore >= 70 ? 'bg-emerald-400' : 'bg-amber-400')} style={{ width: `${Math.min(100, row.averageScore)}%` }} />
+                                    </div>
+                                    <span className="text-white font-bold">{row.averageScore}%</span>
+                                  </div>
+                                  <div className="text-xs text-slate-400 mt-1">
+                                    {row.completedAttempts} concluídas • {row.passRate}% aprovação
+                                  </div>
+                                </td>
+                                <td className="px-5 py-4 min-w-[190px]">
+                                  <div className="text-white font-semibold">{row.totalXp} XP • Nível {row.level}</div>
+                                  <div className="text-xs text-slate-400 mt-1">
+                                    {row.badges} selos • {row.certificates} certificados
+                                  </div>
+                                </td>
+                                <td className="px-5 py-4 min-w-[160px]">
+                                  <span className={cn('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border', riskConfig[row.risk].className)}>
+                                    {riskConfig[row.risk].label}
+                                  </span>
+                                  <div className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                                    <Clock size={12} />
+                                    {row.lastActivity ? new Date(row.lastActivity).toLocaleDateString('pt-BR') : 'Sem atividade'}
+                                  </div>
+                                </td>
+                                <td className="px-5 py-4">
+                                  <div className="flex flex-wrap justify-end gap-2">
+                                    <button
+                                      onClick={() => setSelectedPerformanceUserId(row.userId)}
+                                      className="px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 text-xs font-semibold border border-blue-500/20"
+                                    >
+                                      Detalhes
+                                    </button>
+                                    {row.activeLocks > 0 && (
+                                      <button
+                                        onClick={() => clearUserLocks(row)}
+                                        className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/20"
+                                      >
+                                        Liberar
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => toggleUserStatus(row)}
+                                      className={cn(
+                                        'px-3 py-1.5 rounded-lg text-xs font-semibold border',
+                                        row.status === 'Ativo' ?
+                                           'bg-red-500/10 hover:bg-red-500/20 text-red-300 border-red-500/20'
+                                          : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/20'
+                                      )}
+                                    >
+                                      {row.status === 'Ativo' ? 'Inativar' : 'Ativar'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const user = users.find((item: any) => item.id === row.userId);
+                                        if (user) handleEditUser(user);
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10"
+                                    >
+                                      Editar
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedPerformanceUser && (
+                    <div className="bg-gradient-to-br from-slate-800/95 to-slate-900/95 border border-white/10 rounded-2xl p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h4 className="text-xl font-bold text-white">{selectedPerformanceUser.name}</h4>
+                          <p className="text-sm text-slate-400">{selectedPerformanceUser.email}</p>
+                        </div>
+                        <button onClick={() => setSelectedPerformanceUserId(null)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white">
+                          <X size={18} />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-5">
+                        <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                          <div className="text-xs text-slate-400">Média</div>
+                          <div className="text-2xl font-bold text-white">{selectedPerformanceUser.averageScore}%</div>
+                        </div>
+                        <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                          <div className="text-xs text-slate-400">Aprovação</div>
+                          <div className="text-2xl font-bold text-white">{selectedPerformanceUser.passRate}%</div>
+                        </div>
+                        <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                          <div className="text-xs text-slate-400">XP</div>
+                          <div className="text-2xl font-bold text-white">{selectedPerformanceUser.totalXp}</div>
+                        </div>
+                        <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                          <div className="text-xs text-slate-400">Bloqueios</div>
+                          <div className="text-2xl font-bold text-white">{selectedPerformanceUser.activeLocks}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-amber-300 mt-0.5" />
+                          <div>
+                            <div className="font-bold text-white">Ação recomendada</div>
+                            <p className="text-sm text-slate-300 mt-1">{selectedPerformanceUser.recommendedAction}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
               {activeTab === 'roles' && activeView === 'list' && (
                 <motion.div 
                   key="roles-list"
@@ -644,9 +1144,9 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                                 const allowed = can[permKey]?.(mockUser) ?? false;
                                 return (
                                   <td key={roleKey} className="px-4 py-2 text-center">
-                                    {allowed
-                                      ? <span className="text-emerald-400 font-bold">✓</span>
-                                      : <span className="text-slate-700">—</span>}
+                                    {allowed ?
+                                       <span className="text-emerald-400 font-bold"></span>
+                                      : <span className="text-slate-700"></span>}
                                   </td>
                                 );
                               })}
@@ -699,7 +1199,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                       <textarea 
                         value={roleDesc}
                         onChange={(e) => setRoleDesc(e.target.value)}
-                        placeholder="O que este usuário pode fazer no sistema?"
+                        placeholder="O que este usuário pode fazer no sistema"
                         className="w-full h-24 resize-none bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-purple-500/50 focus:bg-white/10 transition-all placeholder:text-slate-500"
                       />
                     </div>
@@ -722,7 +1222,6 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                   </div>
                 </motion.div>
               )}
-
               {activeTab === 'preferences' && (
                 <motion.div
                   key="preferences"
@@ -732,12 +1231,11 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                   className="max-w-4xl"
                 >
                   <div className="mb-8">
-                    <h3 className="text-2xl font-bold text-white">Preferências do Sistema</h3>
-                    <p className="text-sm text-slate-400 mt-1">Configurações globais do Tecno Mapper.</p>
+                    <h3 className="text-2xl font-bold text-white">{'Prefer\u00eancias do Sistema'}</h3>
+                    <p className="text-sm text-slate-400 mt-1">{'Configura\u00e7\u00f5es globais do Tecno Mapper.'}</p>
                   </div>
 
                   <div className="space-y-8">
-                    {/* Workflow Section */}
                     <div>
                       <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Fluxo de Trabalho</h4>
                       <div className="space-y-4">
@@ -748,7 +1246,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           </div>
                           <Toggle checked={preferences.requireApproval} onChange={() => {
                             setPreferences({ requireApproval: !preferences.requireApproval });
-                            if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Aprovação Obrigatória = ${!preferences.requireApproval}`);
+                            if (enableAuditLog && currentUser.name) console.log(`[AUDIT] ${currentUser.name} alterou: Aprovação Obrigatória = ${!preferences.requireApproval}`);
                           }} />
                         </div>
                         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center justify-between">
@@ -758,7 +1256,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                           </div>
                           <Toggle checked={preferences.autoSave} onChange={() => {
                             setPreferences({ autoSave: !preferences.autoSave });
-                            if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Salvamento Automático = ${!preferences.autoSave}`);
+                            if (enableAuditLog && currentUser.name) console.log(`[AUDIT] ${currentUser.name} alterou: Salvamento Automático = ${!preferences.autoSave}`);
                           }} />
                         </div>
                         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center justify-between">
@@ -774,7 +1272,6 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                       </div>
                     </div>
 
-                    {/* Notifications Section */}
                     <div>
                       <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Notificações</h4>
                       <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center justify-between">
@@ -784,26 +1281,25 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                         </div>
                         <Toggle checked={preferences.emailNotifications} onChange={() => {
                           setPreferences({ emailNotifications: !preferences.emailNotifications });
-                          if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Notificações por Email = ${!preferences.emailNotifications}`);
+                          if (enableAuditLog && currentUser.name) console.log(`[AUDIT] ${currentUser.name} alterou: Notificações por Email = ${!preferences.emailNotifications}`);
                         }} />
                       </div>
                     </div>
 
-                    {/* Display Section */}
                     <div>
-                      <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Exibição</h4>
+                      <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Exibio</h4>
                       <div className="space-y-4">
                         <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
                           <div className="flex items-center justify-between mb-4">
                             <div>
-                              <h5 className="font-bold text-white">Layout Padrão do Mapa</h5>
-                              <p className="text-sm text-slate-400 mt-1">Direção de organização automática dos nós.</p>
+                              <h5 className="font-bold text-white">Layout Padro do Mapa</h5>
+                              <p className="text-sm text-slate-400 mt-1">Direo de organização automtica dos ns.</p>
                             </div>
                             <select
                               value={preferences.defaultMapLayout}
                               onChange={(e) => {
                                 setPreferences({ defaultMapLayout: e.target.value as Preferences['defaultMapLayout'] });
-                                if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Layout Padrão = ${e.target.value}`);
+                                if (enableAuditLog && currentUser.name) console.log(`[AUDIT] ${currentUser.name} alterou: Layout Padro = ${e.target.value}`);
                               }}
                               className="bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50"
                             >
@@ -814,23 +1310,44 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                             </select>
                           </div>
                         </div>
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <h5 className="font-bold text-white">Tema das Conexões</h5>
+                              <p className="text-sm text-slate-400 mt-1">Altera o estilo visual das linhas do mapa em tempo real.</p>
+                            </div>
+                            <select
+                              value={preferences.connectionTheme}
+                              onChange={(e) => {
+                                setPreferences({ connectionTheme: e.target.value as Preferences['connectionTheme'] });
+                                if (enableAuditLog && currentUser.name) console.log(`[AUDIT] ${currentUser.name} alterou: Tema das Conexões = ${e.target.value}`);
+                              }}
+                              className="bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50 min-w-[200px]"
+                            >
+                              <option value="industrialIATF" className="bg-slate-800">Industrial IATF</option>
+                              <option value="engineering" className="bg-slate-800">Engenharia</option>
+                              <option value="futuristic" className="bg-slate-800">Futurista</option>
+                              <option value="classic" className="bg-slate-800">Clássico</option>
+                              <option value="minimalist" className="bg-slate-800">Minimalista</option>
+                            </select>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Security Section */}
                     <div>
                       <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Segurança</h4>
                       <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
                         <div className="flex items-center justify-between">
                           <div>
-                            <h5 className="font-bold text-white">Tempo de Sessão</h5>
-                            <p className="text-sm text-slate-400 mt-1">Encerrar sessão após inatividade (minutos).</p>
+                            <h5 className="font-bold text-white">Tempo de Sesso</h5>
+                            <p className="text-sm text-slate-400 mt-1">Encerrar sesso após inatividade (minutos).</p>
                           </div>
                           <select
                             value={preferences.sessionTimeout}
                             onChange={(e) => {
                               setPreferences({ sessionTimeout: parseInt(e.target.value) });
-                              if (enableAuditLog && currentUser?.name) console.log(`[AUDIT] ${currentUser.name} alterou: Tempo de Sessão = ${e.target.value} min`);
+                              if (enableAuditLog && currentUser.name) console.log(`[AUDIT] ${currentUser.name} alterou: Tempo de Sesso = ${e.target.value} min`);
                             }}
                             className="bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50"
                           >
@@ -843,25 +1360,36 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                       </div>
                     </div>
 
-                    {/* Danger Zone */}
                     <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6">
                       <h4 className="font-bold text-red-500">Zona de Perigo</h4>
                       <p className="text-sm text-red-400/80 mt-1 mb-4">Ações destrutivas que afetam todos os usuários da organização.</p>
                       <button
                         onClick={() => {
                           setConfirmState({
-                            title: 'Excluir Organização',
-                            message: 'Tem certeza que deseja excluir os dados da organização? Esta ação é irreversível e afeta todos os usuários.',
+                            title: 'Excluir Organizao',
+                            message: 'Tem certeza que deseja excluir os dados da organização Esta ação  irreversível e afeta todos os usuários.',
                             type: 'danger',
                             onConfirm: () => {},
                           });
                         }}
                         className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-sm rounded-xl transition-colors"
                       >
-                        Excluir Organização
+                        Excluir Organizao
                       </button>
                     </div>
                   </div>
+                </motion.div>
+              )}
+
+              {activeTab === 'gamification' && isAdmin && (
+                <motion.div
+                  key="gamification"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="max-w-6xl"
+                >
+                  <GamificationSettingsPanel currentUserName={currentUser.name} />
                 </motion.div>
               )}
 
@@ -929,7 +1457,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                     </button>
                   </div>
 
-                  {/* Audit Log — cards on mobile, table on desktop */}
+                  {/* Audit Log  cards on mobile, table on desktop */}
                   <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
                     {filteredLogs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-slate-500">
@@ -1000,7 +1528,7 @@ export function SettingsModal({ onClose, preferences: externalPreferences, setPr
                     )}
                   </div>
 
-                  {/* Preview TXT — collapsible */}
+                  {/* Preview TXT  collapsible */}
                   {filteredLogs.length > 0 && (
                     <details className="bg-black/30 border border-white/10 rounded-2xl overflow-hidden">
                       <summary className="px-4 py-3 text-xs sm:text-sm font-bold text-slate-400 flex items-center gap-2 cursor-pointer select-none list-none">
@@ -1084,7 +1612,7 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
                                 onClick={() => {
                                   setConfirmState({
                                     title: 'Excluir Departamento',
-                                    message: `Tem certeza que deseja excluir o departamento "${dept.name}"? Esta ação não pode ser desfeita.`,
+                                    message: `Tem certeza que deseja excluir o departamento "${dept.name}" Esta ação não pode ser desfeita.`,
                                     type: 'danger',
                                     onConfirm: () => deleteDepartment(dept.id),
                                   });
@@ -1268,4 +1796,3 @@ ${filteredLogs.slice(-5).map((log, i) => `[${(filteredLogs.length - 5 + i + 1).t
     </>
   );
 }
-

@@ -38,13 +38,13 @@ export function useUsers() {
       supabase.from('departments').select('*').order('created_at', { ascending: true }),
     ]);
     if (usersErr) {
-      console.error('❌ useUsers fetchAll error:', usersErr);
+      console.error('L useUsers fetchAll error:', usersErr);
       setError(usersErr.message);
     } else if (usersData) {
       setUsers(usersData.map(u => ({ ...u, status: u.status || 'Ativo' })));
     }
     if (deptsErr) {
-      console.error('❌ useUsers fetchDepts error:', deptsErr);
+      console.error('L useUsers fetchDepts error:', deptsErr);
     } else if (deptsData) {
       setDepartments(deptsData);
     }

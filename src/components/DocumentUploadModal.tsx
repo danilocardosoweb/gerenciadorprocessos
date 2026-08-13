@@ -16,10 +16,10 @@ interface DocumentUploadModalProps {
 }
 
 const visibilityOptions: { value: DocVisibility; label: string; desc: string; icon: React.ElementType; color: string }[] = [
-  { value: 'public',     label: '🌐 Público (todos)',      desc: 'Todos os usuários podem ver',           icon: Globe,     color: 'text-emerald-400' },
-  { value: 'department', label: '🏢 Departamento',          desc: 'Apenas o departamento selecionado',     icon: Building2, color: 'text-blue-400'    },
-  { value: 'specific',   label: '👤 Específico (1 pessoa)', desc: 'Somente uma pessoa + você',             icon: User,      color: 'text-violet-400'  },
-  { value: 'private',    label: '🔒 Privado (só eu)',        desc: 'Apenas você pode ver',                  icon: Lock,      color: 'text-slate-400'   },
+  { value: 'public',     label: '< Público (todos)',      desc: 'Todos os usuários podem ver',           icon: Globe,     color: 'text-emerald-400' },
+  { value: 'department', label: 'Departamento',          desc: 'Apenas o departamento selecionado',     icon: Building2, color: 'text-blue-400'    },
+  { value: 'specific',   label: '=d Específico (1 pessoa)', desc: 'Somente uma pessoa + você',             icon: User,      color: 'text-violet-400'  },
+  { value: 'private',    label: '= Privado (só eu)',        desc: 'Apenas você pode ver',                  icon: Lock,      color: 'text-slate-400'   },
 ];
 
 export function DocumentUploadModal({ onClose, onSave, initialData, currentUser, users = [], departments = [], isOpen }: DocumentUploadModalProps) {
@@ -36,10 +36,16 @@ export function DocumentUploadModal({ onClose, onSave, initialData, currentUser,
   const [specificUserOpen, setSpecificUserOpen] = useState(false);
   const [localDepartments, setLocalDepartments] = useState(departments);
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
   useEffect(() => {
     if (isOpen) {
       supabase.from('departments').select('*').order('created_at', { ascending: true }).then(({ data, error }) => {
-        if (error) console.error('❌ Error fetching departments:', error);
+        if (error) console.error('L Error fetching departments:', error);
         if (data) setLocalDepartments(data);
       });
     }
@@ -67,7 +73,11 @@ export function DocumentUploadModal({ onClose, onSave, initialData, currentUser,
       id: initialData?.id || `doc-${Date.now()}`,
       name: finalName,
       type: file ? file.name.split('.').pop()?.toLowerCase() || 'file' : type,
-      size: file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : initialData?.size || '1.0 MB',
+      size: file ? formatFileSize(file.size) : initialData.size || '1.0 MB',
+      file_size_bytes: file ? file.size : initialData.file_size_bytes || null,
+      mime_type: file ? (file.type || null) : initialData.mime_type || null,
+      file_path: initialData.file_path || null,
+      localFile: file,
       uploadDate: initialData?.uploadDate || now.toISOString().split('T')[0],
       expirationDate: expirationDate || null,
       status,
@@ -183,7 +193,7 @@ export function DocumentUploadModal({ onClose, onSave, initialData, currentUser,
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50"
-              placeholder="Ex: Procedimento Operacional Padrão"
+              placeholder="Ex: Procedimento Operacional Padro"
               required
             />
           </div>
@@ -318,7 +328,7 @@ export function DocumentUploadModal({ onClose, onSave, initialData, currentUser,
               </div>
               <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-                Apenas <strong className="text-slate-400">{users.find(u => u.id === specificUserId)?.name || 'essa pessoa'}</strong> e você poderão ver este documento.
+                Apenas <strong className="text-slate-400">{users.find(u => u.id === specificUserId).name || 'essa pessoa'}</strong> e voc podero ver este documento.
               </p>
             </div>
           )}

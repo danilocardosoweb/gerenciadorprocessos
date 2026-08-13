@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { normalizeConnectionTheme } from '../lib/connectionStyles';
 
 export interface Preferences {
   requireApproval: boolean;
@@ -9,6 +10,7 @@ export interface Preferences {
   sessionTimeout: number;
   enableAuditLog: boolean;
   defaultMapLayout: 'LR' | 'TB' | 'RL' | 'BT';
+  connectionTheme: 'classic' | 'engineering' | 'futuristic' | 'minimalist' | 'industrialIATF';
 }
 
 const defaultPreferences: Preferences = {
@@ -20,6 +22,7 @@ const defaultPreferences: Preferences = {
   sessionTimeout: 30,
   enableAuditLog: true,
   defaultMapLayout: 'LR',
+  connectionTheme: 'industrialIATF',
 };
 
 const STORAGE_KEY = 'tecno_mapper_preferences';
@@ -34,7 +37,11 @@ export function usePreferences() {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setPreferencesState({ ...defaultPreferences, ...parsed });
+        setPreferencesState({
+          ...defaultPreferences,
+          ...parsed,
+          connectionTheme: normalizeConnectionTheme(parsed.connectionTheme),
+        });
       }
     } catch (error) {
       console.error('Error loading preferences:', error);

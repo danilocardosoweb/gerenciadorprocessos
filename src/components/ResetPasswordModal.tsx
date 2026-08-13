@@ -153,7 +153,7 @@ export function ResetPasswordModal({ isOpen, onClose }: ResetPasswordModalProps)
                     </button>
                   </div>
                   {confirmPassword.length > 0 && !isPasswordMatch && (
-                    <p className="text-xs text-red-400 mt-1">As senhas não coincidem</p>
+                    <p className="text-xs text-red-400 mt-1">As senhas no coincidem</p>
                   )}
                 </div>
 

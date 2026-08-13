@@ -53,7 +53,7 @@ export function ApprovalModal({ isOpen, onClose, taskTitle, onApprove, onReject,
 
           {!action ? (
             <div className="space-y-3">
-              <p className="text-sm text-slate-400">Selecione uma ação:</p>
+              <p className="text-sm text-slate-400">Selecione uma ao:</p>
               <button
                 onClick={() => setAction('approve')}
                 className="w-full flex items-center justify-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl hover:bg-emerald-500/20 transition-all"

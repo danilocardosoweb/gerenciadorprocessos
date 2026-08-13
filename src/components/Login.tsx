@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Network, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
-import backgroundImage from '../assets/Fundo2.png';
+import backgroundImage from '../assets/login-background.png';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => boolean | Promise<boolean>;
@@ -38,7 +38,7 @@ export function Login({ onLogin, onClose }: LoginProps) {
 
     setIsLoading(true);
 
-    // Simula delay de autenticação
+    // Simula delay de autenticao
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const success = await onLogin(email, password);
@@ -64,7 +64,7 @@ export function Login({ onLogin, onClose }: LoginProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0f172a]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#0f172a] overflow-hidden">
       {/* Background Image */}
       <div 
         className="absolute inset-0 bg-contain bg-center bg-no-repeat"
@@ -72,17 +72,18 @@ export function Login({ onLogin, onClose }: LoginProps) {
       />
       
       {/* Background Effects */}
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute inset-0 bg-slate-950/55 pointer-events-none" />
+      <div className="absolute top-[-12%] left-[-10%] w-[420px] h-[420px] bg-blue-600/12 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-12%] right-[-10%] w-[480px] h-[480px] bg-indigo-600/12 rounded-full blur-[140px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative w-full max-w-md"
+        className="relative z-10 w-full max-w-[19.5rem] sm:max-w-[22.5rem] md:max-w-[24.5rem]"
       >
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="bg-black/10 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+        <form onSubmit={handleSubmit} className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-4.5 sm:p-6.5 shadow-2xl">
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}

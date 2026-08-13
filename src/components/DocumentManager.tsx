@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Image as ImageIcon, AlertTriangle, CheckCircle2, CloudUpload, Search, File, Trash2, Download, MoreVertical, FileBadge, Edit3, Globe, Building2, User, Lock } from 'lucide-react';
+import { FileText, Image as ImageIcon, AlertTriangle, CheckCircle2, CloudUpload, Search, File, Trash2, Download, FileBadge, Edit3, Globe, Building2, User, Lock, Eye, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePermissions } from '../lib/permissions';
 import { DocumentUploadModal } from './DocumentUploadModal';
+import { ConfirmModal } from './ConfirmModal';
 
 import { supabase } from '../lib/supabase';
 
@@ -14,6 +16,10 @@ export interface DocumentItem {
   name: string;
   type: string;
   size: string;
+  file_size_bytes: number | null;
+  file_path: string | null;
+  mime_type: string | null;
+  localFile?: File | null;
   uploadDate: string;
   expirationDate: string | null;
   status: 'valid' | 'expiring' | 'expired';
@@ -41,12 +47,25 @@ const visibilityConfig: Record<DocVisibility, { icon: React.FC<{ size?: number; 
 };
 
 export function DocumentManager({ documents, setDocuments, refreshData, currentUser, users: usersProp = [], departments: deptsProp = [] }: DocumentManagerProps) {
-  const perms = usePermissions(currentUser as any);
+  const safeCurrentUser = currentUser || { id: '', name: '', email: '', role: 'Visualizador', department: '' };
+  const perms = usePermissions(safeCurrentUser as any);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string>('');
+  const [documentPendingDeletion, setDocumentPendingDeletion] = useState<DocumentItem | null>(null);
   const [users, setUsers] = useState(usersProp);
   const [departments, setDepartments] = useState(deptsProp);
+
+  const resolveCreatedBy = () => {
+    const uid = safeCurrentUser.id || null;
+    if (!uid) return null;
+    const userExistsInTecnoUsers = users.some(u => u.id === uid);
+    return userExistsInTecnoUsers ? uid : null;
+  };
 
   useEffect(() => {
     if (usersProp.length === 0 || deptsProp.length === 0) {
@@ -54,31 +73,69 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
         supabase.from('tecno_users').select('*').order('created_at', { ascending: true }),
         supabase.from('departments').select('*').order('created_at', { ascending: true }),
       ]).then(([{ data: u, error: uErr }, { data: d, error: dErr }]) => {
-        if (uErr) console.error('❌ Error fetching users:', uErr);
-        if (dErr) console.error('❌ Error fetching departments:', dErr);
+        if (uErr) console.error('L Error fetching users:', uErr);
+        if (dErr) console.error('L Error fetching departments:', dErr);
         if (u) setUsers(u);
         if (d) setDepartments(d);
       });
     }
   }, []);
 
-  const filteredDocs = documents.filter(doc => {
-    if (!(doc.name || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    // Visibility filter
-    if (doc.visibility === 'private' && doc.created_by !== currentUser?.id) return false;
-    if (doc.visibility === 'specific') {
-      if (doc.created_by !== currentUser?.id && doc.specific_user_id !== currentUser?.id) return false;
-    }
-    if (doc.visibility === 'department') {
-      const userDept = currentUser?.department;
-      if (doc.created_by !== currentUser?.id && userDept && doc.department && userDept !== doc.department) return false;
-    }
-    return true;
-  });
+  const isPrivilegedViewer = perms.isGerente || perms.isAdmin || perms.can.deleteDocument;
+  const normalizedUserDept = (safeCurrentUser.department || '').trim().toLowerCase();
+  const normalizedUserDeptName =
+    (departments.find(d => d.id === safeCurrentUser.department)?.name || '').trim().toLowerCase();
 
-  const validCount = documents.filter(d => d.status === 'valid').length;
-  const expiringCount = documents.filter(d => d.status === 'expiring').length;
-  const expiredCount = documents.filter(d => d.status === 'expired').length;
+  const canUserViewDoc = (doc: DocumentItem) => {
+    // Perfis gerenciais/administrativos podem visualizar todos os documentos.
+    if (isPrivilegedViewer) return true;
+
+    if (doc.visibility === 'private') {
+      return doc.created_by === safeCurrentUser.id;
+    }
+
+    if (doc.visibility === 'specific') {
+      return doc.created_by === safeCurrentUser.id || doc.specific_user_id === safeCurrentUser.id;
+    }
+
+    if (doc.visibility === 'department') {
+      // Compatibiliza quando currentUser.department vem como nome ou id.
+      const docDept = (doc.department || '').trim().toLowerCase();
+      const sameDepartment =
+        !!docDept &&
+        (docDept === normalizedUserDept || docDept === normalizedUserDeptName);
+      return doc.created_by === safeCurrentUser.id || sameDepartment;
+    }
+
+    return true; // public
+  };
+
+  const visibleDocs = documents.filter(canUserViewDoc);
+  const filteredDocs = visibleDocs.filter(doc =>
+    (doc.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const validCount = visibleDocs.filter(d => d.status === 'valid').length;
+  const expiringCount = visibleDocs.filter(d => d.status === 'expiring').length;
+  const expiredCount = visibleDocs.filter(d => d.status === 'expired').length;
+
+  const formatFileSize = (bytes: number | null, fallback: string) => {
+    if (typeof bytes === 'number' && Number.isFinite(bytes)) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+    return fallback || '-';
+  };
+
+  const normalizeFileName = (value: string) =>
+    (value || 'arquivo')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  const buildStoragePath = (docId: string, fileName: string) =>
+    `${docId}/${Date.now()}-${normalizeFileName(fileName)}`;
 
   const handleSaveDoc = async (doc: DocumentItem) => {
     // optimistic update
@@ -93,36 +150,218 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
         visibility: doc.visibility,
         department: doc.department || null,
         specific_user_id: doc.specific_user_id || null,
+        file_size_bytes: doc.file_size_bytes ?? null,
+        file_path: doc.file_path ?? null,
+        mime_type: doc.mime_type ?? null,
       }).eq('id', doc.id);
     } else {
-      setDocuments([doc, ...documents]);
-      const { data, error } = await supabase.from('documents').insert({
+      const hasFile = !!doc.localFile;
+      const newId = crypto.randomUUID();
+      let filePath: string | null = null;
+      let fileSizeBytes: number | null = doc.file_size_bytes ?? null;
+      let mimeType: string | null = doc.mime_type ?? null;
+
+      if (hasFile && doc.localFile) {
+        filePath = buildStoragePath(newId, doc.localFile.name);
+        fileSizeBytes = doc.localFile.size;
+        mimeType = doc.localFile.type || null;
+
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, doc.localFile, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: doc.localFile.type || undefined,
+          });
+
+        if (uploadError) {
+          alert(`Erro ao enviar arquivo para armazenamento: ${uploadError.message}`);
+          return;
+        }
+      }
+
+      const localDoc: DocumentItem = {
+        ...doc,
+        id: newId,
+        file_path: filePath,
+        file_size_bytes: fileSizeBytes,
+        mime_type: mimeType,
+        size: formatFileSize(fileSizeBytes, doc.size),
+        localFile: null,
+      };
+      setDocuments([localDoc, ...documents]);
+
+      const insertPayload: any = {
+        id: newId,
         name: doc.name,
         type: doc.type,
-        size: doc.size,
+        size: formatFileSize(fileSizeBytes, doc.size),
         upload_date: doc.uploadDate,
         expiration_date: doc.expirationDate,
         status: doc.status,
         visibility: doc.visibility,
         department: doc.department || null,
         specific_user_id: doc.specific_user_id || null,
-        created_by: currentUser?.id || null,
-      }).select().single();
-      
-      if (data && refreshData) refreshData();
+        created_by: resolveCreatedBy(),
+        file_size_bytes: fileSizeBytes,
+        file_path: filePath,
+        mime_type: mimeType,
+      };
+
+      let { data, error } = await supabase
+        .from('documents')
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      // Backward compatibility: schema sem colunas novas.
+      if (error && (error as any).code === '42703') {
+        const legacyPayload = {
+          id: newId,
+          name: doc.name,
+          type: doc.type,
+          size: formatFileSize(fileSizeBytes, doc.size),
+          upload_date: doc.uploadDate,
+          expiration_date: doc.expirationDate,
+          status: doc.status,
+          visibility: doc.visibility,
+          department: doc.department || null,
+          specific_user_id: doc.specific_user_id || null,
+          created_by: resolveCreatedBy(),
+        };
+
+        const legacyInsert = await supabase
+          .from('documents')
+          .insert(legacyPayload)
+          .select()
+          .single();
+        data = legacyInsert.data;
+        error = legacyInsert.error;
+      }
+
+      // Backward compatibility: FK antiga ou inconsistência entre users/tecno_users
+      if (error && (error as any).code === '23503' && /documents_created_by_fkey/i.test(error.message || '')) {
+        const fallbackPayload: any = {
+          ...insertPayload,
+          created_by: null,
+        };
+        if ((error as any).code === '42703') {
+          delete fallbackPayload.file_size_bytes;
+          delete fallbackPayload.file_path;
+          delete fallbackPayload.mime_type;
+        }
+
+        const fallbackInsert = await supabase
+          .from('documents')
+          .insert(fallbackPayload)
+          .select()
+          .single();
+
+        data = fallbackInsert.data;
+        error = fallbackInsert.error;
+      }
+
+      if (error) {
+        alert(`Erro ao salvar documento: ${error.message}`);
+      } else if (data && refreshData) {
+        refreshData();
+      }
     }
     setIsModalOpen(false);
     setEditingDoc(null);
   };
 
-  const handleDeleteDoc = async (id: string) => {
-    if (!perms.can.deleteDocument) {
-      alert('❌ Você não tem permissão para excluir documentos.');
+  const handleDownloadDoc = async (doc: DocumentItem) => {
+    if (!doc.file_path) {
+      alert('Este documento não possui arquivo anexado para download.');
       return;
     }
-    if (!confirm('⚠️ TEM CERTEZA?\n\nEsta ação irá EXCLUIR este documento permanentemente.\nEsta ação NÃO pode ser desfeita.\n\nClique em OK para confirmar ou Cancelar para voltar.')) return;
-    setDocuments(documents.filter(d => d.id !== id));
-    await supabase.from('documents').delete().eq('id', id);
+
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .download(doc.file_path);
+
+    if (error || !data) {
+      alert(`Não foi possível baixar o arquivo: ${error.message || 'arquivo indisponível'}`);
+      return;
+    }
+
+    const blobUrl = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = doc.name || 'documento';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+  };
+
+  const handlePreviewDoc = async (doc: DocumentItem) => {
+    if (!doc.file_path) {
+      alert('Este documento não possui arquivo anexado para visualização.');
+      return;
+    }
+
+    setPreviewDoc(doc);
+    setPreviewLoading(true);
+    setPreviewError('');
+    setPreviewUrl('');
+
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(doc.file_path, 60 * 30);
+
+    if (error || !data.signedUrl) {
+      setPreviewError(`Não foi possível abrir a visualização: ${error.message || 'URL indisponível'}`);
+      setPreviewLoading(false);
+      return;
+    }
+
+    setPreviewUrl(data.signedUrl);
+    setPreviewLoading(false);
+  };
+
+  const closePreview = () => {
+    setPreviewDoc(null);
+    setPreviewUrl('');
+    setPreviewError('');
+    setPreviewLoading(false);
+  };
+
+  const getPreviewKind = (doc: DocumentItem | null) => {
+    if (!doc) return 'unknown';
+    const ext = ((doc.type || doc.name.split('.').pop() || '').toLowerCase()).trim();
+    if (['pdf'].includes(ext)) return 'pdf';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
+    if (['txt', 'md', 'csv'].includes(ext)) return 'text';
+    if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) return 'office';
+    return 'unknown';
+  };
+
+  const handleDeleteDoc = (documentItem: DocumentItem) => {
+    if (!perms.can.deleteDocument) {
+      alert('Você não tem permissão para excluir documentos.');
+      return;
+    }
+    setDocumentPendingDeletion(documentItem);
+  };
+
+  const confirmDeleteDoc = async () => {
+    if (!documentPendingDeletion) return;
+
+    const { error } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', documentPendingDeletion.id);
+
+    if (error) {
+      console.error('Erro ao excluir documento:', error);
+      alert(`Não foi possível excluir o documento: ${error.message}`);
+      throw error;
+    }
+
+    setDocuments(current => current.filter(document => document.id !== documentPendingDeletion.id));
+    setDocumentPendingDeletion(null);
     if (refreshData) refreshData();
   };
 
@@ -145,7 +384,7 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
             <FileBadge size={18} />
             <span className="text-sm font-medium">Total de Documentos</span>
           </div>
-          <span className="text-3xl font-bold text-white">{documents.length}</span>
+          <span className="text-3xl font-bold text-white">{visibleDocs.length}</span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl flex flex-col justify-between">
@@ -235,7 +474,7 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-400">{doc.size}</td>
+                    <td className="px-6 py-4 text-sm text-slate-400">{formatFileSize(doc.file_size_bytes, doc.size)}</td>
                     <td className="px-6 py-4 text-sm text-slate-400">{doc.uploadDate}</td>
                     <td className="px-6 py-4 text-sm text-slate-400">{doc.expirationDate || '-'}</td>
                     <td className="px-6 py-4">
@@ -277,12 +516,23 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
                         >
                           <Edit3 size={18} />
                         </button>
-                        <button className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Download">
+                        <button
+                          onClick={() => handlePreviewDoc(doc)}
+                          className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-cyan-400/10 rounded-lg transition-colors"
+                          title="Visualizar"
+                        >
+                          <Eye size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDownloadDoc(doc)}
+                          className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
+                          title="Download"
+                        >
                           <Download size={18} />
                         </button>
                         {perms.can.deleteDocument && (
                         <button 
-                          onClick={() => handleDeleteDoc(doc.id)}
+                          onClick={() => handleDeleteDoc(doc)}
                           className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
                           title="Excluir"
                         >
@@ -295,8 +545,10 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
                 ))}
                 {filteredDocs.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                      Nenhum documento encontrado.
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                      {documents.length > 0 && visibleDocs.length === 0 ?
+                         'Existem documentos cadastrados, mas voc não tem acesso a eles pela visibilidade definida.'
+                        : 'Nenhum documento encontrado.'}
                     </td>
                   </tr>
                 )}
@@ -322,7 +574,103 @@ export function DocumentManager({ documents, setDocuments, refreshData, currentU
           />
         )}
       </AnimatePresence>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {previewDoc && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[99999] flex items-center justify-center p-4 md:p-8"
+            >
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closePreview} />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: 8 }}
+                className="relative w-full max-w-6xl h-[86vh] rounded-2xl border border-white/15 bg-[#111c33] overflow-hidden shadow-2xl"
+              >
+                <div className="h-14 px-4 md:px-5 border-b border-white/10 bg-black/20 flex items-center justify-between">
+                  <p className="text-sm md:text-base text-white font-semibold truncate pr-4">{previewDoc.name}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDownloadDoc(previewDoc)}
+                      className="px-3 py-1.5 text-xs md:text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold"
+                    >
+                      Baixar
+                    </button>
+                    <button
+                      onClick={closePreview}
+                      className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10"
+                      title="Fechar"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-[calc(86vh-56px)] bg-slate-950/40">
+                  {previewLoading && (
+                    <div className="h-full flex items-center justify-center text-slate-300">
+                      Carregando visualização...
+                    </div>
+                  )}
+
+                  {!previewLoading && previewError && (
+                    <div className="h-full flex items-center justify-center p-6">
+                      <div className="max-w-xl w-full rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200 text-sm">
+                        {previewError}
+                      </div>
+                    </div>
+                  )}
+
+                  {!previewLoading && !previewError && previewUrl && (() => {
+                    const kind = getPreviewKind(previewDoc);
+                    if (kind === 'image') {
+                      return (
+                        <div className="h-full flex items-center justify-center bg-black/30 p-4">
+                          <img src={previewUrl} alt={previewDoc.name} className="max-h-full max-w-full object-contain rounded-lg" />
+                        </div>
+                      );
+                    }
+
+                    if (kind === 'office') {
+                      const officeUrl = `https://view.officeapps.live.com/op/embed.aspxsrc=${encodeURIComponent(previewUrl)}`;
+                      return <iframe title="Pr-visualização Office" src={officeUrl} className="w-full h-full border-0" />;
+                    }
+
+                    if (kind === 'pdf' || kind === 'text') {
+                      return <iframe title="Pr-visualização" src={previewUrl} className="w-full h-full border-0" />;
+                    }
+
+                    return (
+                      <div className="h-full flex items-center justify-center p-6">
+                        <div className="max-w-xl w-full rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100 text-sm">
+                          Este formato ainda não tem visualização embutida. Use o botão "Baixar".
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+      {typeof document !== 'undefined' && createPortal(
+        <ConfirmModal
+          isOpen={Boolean(documentPendingDeletion)}
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={confirmDeleteDoc}
+          title="Excluir documento?"
+          message={`O arquivo "${documentPendingDeletion?.name || ''}" será excluído permanentemente.\n\nEsta ação não pode ser desfeita.`}
+          confirmText="Excluir documento"
+          cancelText="Manter documento"
+          type="danger"
+        />,
+        document.body
+      )}
     </div>
   );
 }
-

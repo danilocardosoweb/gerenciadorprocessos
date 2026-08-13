@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Network, FolderOpen, FileText, Box, Lightbulb, Globe, Lock, Building2, Users, Check, ChevronDown } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 
@@ -14,13 +15,15 @@ export interface NewItemData {
   visibility: Visibility;
   allowed_departments: string[];
   allowed_user_ids: string[];
+  tags?: string[];
   nodes?: any[];
   edges?: any[];
+  nodeDetails?: Record<string, any>;
 }
 
 interface NewItemModalProps {
   onClose: () => void;
-  onCreate: (data: NewItemData) => void;
+  onCreate: (data: NewItemData) => void | Promise<void>;
   initialType?: 'map' | 'folder' | 'markdown' | 'sector3d';
   currentUser?: { id: string; name: string; email: string; role: string } | null;
   isOpen?: boolean;
@@ -31,6 +34,8 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [showKaizenInfo, setShowKaizenInfo] = useState(initialType === 'markdown');
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
 
   // Visibility
   const [visibility, setVisibility] = useState<Visibility>('public');
@@ -44,14 +49,14 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
   useEffect(() => {
     const fetchDepartments = () => {
       supabase.from('departments').select('*').order('created_at', { ascending: true }).then(({ data, error }) => {
-        if (error) console.error('❌ Error fetching departments:', error);
+        if (error) console.error('L Error fetching departments:', error);
         if (data) setAllDepartments(data);
       });
     };
     
     const fetchUsers = () => {
       supabase.from('tecno_users').select('*').eq('status', 'Ativo').order('created_at', { ascending: true }).then(({ data, error }) => {
-        if (error) console.error('❌ Error fetching users:', error);
+        if (error) console.error('L Error fetching users:', error);
         if (data) setAllUsers(data.filter(u => u.id !== currentUser?.id));
       });
     };
@@ -66,17 +71,25 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
   const toggleUser = (id: string) =>
     setSelectedUsers(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
 
-  const handleCreate = () => {
-    if (!title.trim()) return;
-    onCreate({
-      title,
-      description,
-      type,
-      visibility,
-      allowed_departments: visibility === 'departments' ? selectedDepts : [],
-      allowed_user_ids: visibility === 'departments' ? selectedUsers : [],
-    });
-    onClose();
+  const handleCreate = async () => {
+    if (!title.trim() || isCreating) return;
+    setIsCreating(true);
+    setCreateError('');
+    try {
+      await onCreate({
+        title,
+        description,
+        type,
+        visibility,
+        allowed_departments: visibility === 'departments' ? selectedDepts : [],
+        allowed_user_ids: visibility === 'departments' ? selectedUsers : [],
+      });
+      onClose();
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'Não foi possível criar o item.');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const types = [
@@ -86,10 +99,10 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
     { id: 'sector3d' as const, label: 'Setor 3D', icon: Box, color: 'text-purple-400', bg: 'bg-purple-500/20' },
   ];
 
-  const visibilityOptions: { id: Visibility; label: string; desc: string; icon: React.ElementType; color: string }[] = [
+  const visibilityOptions: { id: Visibility; label: string; desc: string; icon: LucideIcon; color: string }[] = [
     { id: 'public',      label: 'Público',      desc: 'Todos os usuários ativos podem ver',        icon: Globe,      color: 'text-emerald-400' },
     { id: 'departments', label: 'Restrito',      desc: 'Apenas departamentos/usuários selecionados', icon: Building2, color: 'text-amber-400'   },
-    { id: 'private',     label: 'Privado',       desc: 'Somente você e Administradores',            icon: Lock,       color: 'text-red-400'     },
+    { id: 'private',     label: 'Privado',       desc: 'Somente você e administradores',            icon: Lock,       color: 'text-red-400'     },
   ];
 
   return createPortal(
@@ -137,6 +150,24 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
             })}
           </div>
 
+          {type === 'map' && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4"
+            >
+              <div className="flex gap-3">
+                <Network size={18} className="mt-0.5 shrink-0 text-blue-400" />
+                <div>
+                  <p className="text-sm font-bold text-blue-100">Comece com clareza</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                    O mapa será criado somente com o processo principal. No editor, sugestões opcionais ajudarão você a adicionar cada etapa, sem preencher conteúdo automaticamente.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Kaizen info */}
           <AnimatePresence>
             {showKaizenInfo && (
@@ -145,7 +176,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
                 <div className="flex gap-3">
                   <Lightbulb className="text-emerald-400 shrink-0 mt-0.5" size={16} />
                   <div className="text-xs text-slate-400">
-                    <p className="font-semibold text-emerald-300 mb-1">Kaizen — Melhoria Contínua</p>
+                    <p className="font-semibold text-emerald-300 mb-1">Kaizen - Melhoria Contínua</p>
                     <p>Use para sugerir melhorias, documentar problemas e propor soluções. Escreva em Markdown.</p>
                   </div>
                 </div>
@@ -157,7 +188,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-1.5">Título</label>
             <input type="text" autoComplete="off" value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="Ex: Processo Comercial — Vendas B2B"
+              placeholder="Ex: Processo Comercial  Vendas B2B"
               className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/40 transition-all placeholder:text-slate-600"
               autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()}
             />
@@ -172,7 +203,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
             />
           </div>
 
-          {/* ── VISIBILITY ── */}
+          {/*  VISIBILITY  */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-2">Visibilidade</label>
             <div className="grid grid-cols-3 gap-2">
@@ -193,7 +224,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
             </div>
           </div>
 
-          {/* Department + User pickers — only when restricted */}
+          {/* Department + User pickers  only when restricted */}
           <AnimatePresence>
             {visibility === 'departments' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
@@ -299,7 +330,7 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
 
                   {selectedDepts.length === 0 && selectedUsers.length === 0 && (
                     <p className="text-[10px] text-amber-400/70 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                      ⚠️ Selecione ao menos um departamento ou usuário, caso contrário ninguém verá este item.
+                      Atenção: selecione ao menos um departamento ou usuário; caso contrário, ninguém verá este item.
                     </p>
                   )}
                 </div>
@@ -308,9 +339,15 @@ export function NewItemModal({ onClose, onCreate, initialType = 'map', currentUs
           </AnimatePresence>
 
           {/* Create button */}
-          <button onClick={handleCreate} disabled={!title.trim()}
+          {createError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+              {createError}
+            </div>
+          )}
+
+          <button onClick={handleCreate} disabled={!title.trim() || isCreating}
             className="w-full h-11 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:shadow-none">
-            Criar {types.find(t => t.id === type)?.label}
+            {isCreating ? 'Criando com segurança...' : `Criar ${types.find(t => t.id === type)?.label}`}
           </button>
         </div>
       </motion.div>

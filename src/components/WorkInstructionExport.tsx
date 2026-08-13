@@ -1,365 +1,223 @@
-import React from 'react';
-import { FileText, Printer, X } from 'lucide-react';
-
-interface WorkInstructionEdge {
-  source: string;
-  target: string;
-}
-
-interface WorkInstructionNodeData {
-  label: string;
-  nodeType: string;
-  numberCode?: string;
-  description?: string;
-  [key: string]: any;
-}
-
-interface WorkInstructionNode {
-  id: string;
-  data: WorkInstructionNodeData;
-}
+import React, { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Download, FileText, Loader2, Settings2, ShieldCheck, X } from 'lucide-react';
+import { downloadBlob, generateWordDocument, wordFilename } from '../lib/wordDocument';
 
 interface WorkInstructionExportProps {
   isOpen: boolean;
   onClose: () => void;
   mapTitle: string;
-  nodes: any[]; // ReactFlow Node type
-  edges: WorkInstructionEdge[];
-  currentUser: { name: string; email: string; role: string } | null;
+  nodes: any[];
+  edges: any[];
+  nodeDetails: Record<string, any>;
+  currentUser: { name: string; email: string; role: string; department?: string } | null;
 }
 
-export function WorkInstructionExport({ isOpen, onClose, mapTitle, nodes, edges, currentUser }: WorkInstructionExportProps) {
+const today = () => new Date().toLocaleDateString('pt-BR');
+
+const deriveCode = (title: string) => {
+  const words = title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter(Boolean);
+  const acronym = words.slice(0, 4).map((word) => word.slice(0, 3)).join('-');
+  return `POP-${acronym || 'PROCESSO'}-001`;
+};
+
+const fieldClass = 'w-full rounded-xl border border-white/10 bg-[#0b1528] px-4 py-3 text-sm text-white outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 placeholder:text-slate-600';
+
+export function WorkInstructionExport({
+  isOpen,
+  onClose,
+  mapTitle,
+  nodes,
+  edges,
+  nodeDetails,
+  currentUser,
+}: WorkInstructionExportProps) {
+  const [documentCode, setDocumentCode] = useState('');
+  const [revision, setRevision] = useState('Rev. 00');
+  const [sector, setSector] = useState('Corte e Acabados');
+  const [equipment, setEquipment] = useState('Serra Doppia 2 Cabeças');
+  const [preparedBy, setPreparedBy] = useState('');
+  const [approvedBy, setApprovedBy] = useState('A definir');
+  const [effectiveDate, setEffectiveDate] = useState(today());
+  const [includeTechnical, setIncludeTechnical] = useState(true);
+  const [includeTasks, setIncludeTasks] = useState(true);
+  const [includeRecords, setIncludeRecords] = useState(true);
+  const [includeTroubleshooting, setIncludeTroubleshooting] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setDocumentCode(deriveCode(mapTitle));
+    setPreparedBy(currentUser?.name || 'A definir');
+    setSector(currentUser?.department || 'Corte e Acabados');
+    setErrorMessage('');
+  }, [isOpen, mapTitle, currentUser]);
+
+  const stats = useMemo(() => {
+    const details = Object.values(nodeDetails || {});
+    return {
+      nodes: nodes.filter((node) => node?.id && node?.data).length,
+      instructions: details.reduce((total, detail: any) => total + (Array.isArray(detail?.tasks) ? detail.tasks.length : 0), 0),
+      records: details.reduce((total, detail: any) => total + (Array.isArray(detail?.operational?.requiredRecords) ? detail.operational.requiredRecords.length : 0), 0),
+      risks: details.filter((detail: any) => ['high', 'critical'].includes(detail?.operational?.riskLevel)).length,
+    };
+  }, [nodes, nodeDetails]);
+
   if (!isOpen) return null;
 
-  // Build hierarchical structure from nodes and edges
-  const buildHierarchy = () => {
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
-    const childrenMap = new Map<string, string[]>();
-    const parentMap = new Map<string, string>();
-
-    edges.forEach(edge => {
-      if (!childrenMap.has(edge.source)) {
-        childrenMap.set(edge.source, []);
-      }
-      childrenMap.get(edge.source)?.push(edge.target);
-      parentMap.set(edge.target, edge.source);
-    });
-
-    // Find root node (no parent)
-    const rootNode = nodes.find(n => !parentMap.has(n.id));
-    
-    return { rootNode, nodeMap, childrenMap };
-  };
-
-  const { rootNode: rawRootNode, nodeMap, childrenMap } = buildHierarchy();
-  const rootNode = rawRootNode as WorkInstructionNode | undefined;
-
-  // Recursive function to get all steps in order
-  const getAllSteps = (nodeId: string, level = 0): Array<{ node: WorkInstructionNode; level: number; stepNumber: string }> => {
-    const node = nodeMap.get(nodeId) as WorkInstructionNode;
-    if (!node) return [];
-
-    const children = childrenMap.get(nodeId) || [];
-    const steps: Array<{ node: WorkInstructionNode; level: number; stepNumber: string }> = [];
-
-    // Add current node as step (skip root at level 0)
-    if (level > 0) {
-      const stepNumber = node.data.numberCode || `${level}`;
-      steps.push({ node, level, stepNumber });
+  const handleGenerateWord = async () => {
+    setErrorMessage('');
+    setIsGenerating(true);
+    try {
+      const blob = await generateWordDocument({
+        mapTitle,
+        documentCode,
+        revision,
+        sector,
+        equipment,
+        preparedBy,
+        approvedBy,
+        effectiveDate,
+        includeTechnical,
+        includeTasks,
+        includeRecords,
+        includeTroubleshooting,
+        nodes,
+        edges,
+        nodeDetails,
+      });
+      downloadBlob(blob, wordFilename(mapTitle));
+    } catch (error) {
+      console.error('Error generating Word document:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível gerar o documento Word.');
+    } finally {
+      setIsGenerating(false);
     }
-
-    // Process children
-    children.forEach((childId, index) => {
-      const childSteps = getAllSteps(childId, level + 1);
-      steps.push(...childSteps);
-    });
-
-    return steps;
   };
-
-  const allSteps = rootNode ? getAllSteps(rootNode.id, 0) : [];
-
-  // Group steps by phase (level 1 items)
-  const phases: Array<{ title: string; steps: typeof allSteps }> = [];
-  let currentPhase: { title: string; steps: typeof allSteps } | null = null;
-
-  allSteps.forEach(step => {
-    if (step.level === 1) {
-      if (currentPhase) {
-        phases.push(currentPhase);
-      }
-      currentPhase = { title: step.node.data.label, steps: [] };
-    } else if (currentPhase && step.level > 1) {
-      currentPhase.steps.push(step);
-    }
-  });
-  if (currentPhase) {
-    phases.push(currentPhase);
-  }
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const today = new Date().toLocaleDateString('pt-BR');
-  const docCode = `FIT-${mapTitle.substring(0, 3).toUpperCase()}-${new Date().getFullYear()}`;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 print:p-0 print:bg-white print:backdrop-blur-none print:static print:block print:overflow-visible">
-      {/* Modal Container */}
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col print:max-h-none print:rounded-none print:shadow-none print:w-full print:max-w-none">
-        
-        {/* Header - Hidden in print */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <FileText className="text-blue-400" size={24} />
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#020817]/85 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#111d32] shadow-2xl shadow-blue-950/50">
+        <header className="flex items-start justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-[#12284b] to-[#17213a] px-6 py-5 sm:px-8">
+          <div className="flex items-start gap-4">
+            <div className="rounded-2xl border border-blue-400/25 bg-blue-500/15 p-3 text-blue-300">
+              <FileText size={26} />
+            </div>
             <div>
-              <h2 className="text-lg font-bold">Folha de Instruções de Trabalho</h2>
-              <p className="text-sm text-slate-400">Visualização para impressão</p>
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.28em] text-blue-300">Documento controlado</p>
+              <h2 className="text-xl font-bold text-white sm:text-2xl">Gerar Procedimento em Word</h2>
+              <p className="mt-1 max-w-3xl text-sm text-slate-400">Converta o mapa completo em um documento profissional para aprovação, treinamento e impressão.</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
-            >
-              <Printer size={18} />
-              Imprimir / Salvar PDF
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 transition hover:bg-white/10 hover:text-white" aria-label="Fechar">
+            <X size={22} />
+          </button>
+        </header>
 
-        {/* Document Content - Printable Area */}
-        <div className="flex-1 overflow-y-auto p-8 print:p-0 print:overflow-visible bg-white">
-          <div className="max-w-[210mm] mx-auto print:max-w-none print:mx-0 text-gray-900">
-            
-            {/* Document Header */}
-            <div className="border-2 border-gray-900 p-4 mb-6 print:border-2 print:border-gray-900 bg-gray-50">
-              <div className="grid grid-cols-3 gap-4 mb-4 border-b-2 border-gray-900 pb-4">
-                <div className="col-span-2">
-                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase tracking-wider">Título do Documento</div>
-                  <div className="font-bold text-xl uppercase text-black">{mapTitle}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase tracking-wider">Código</div>
-                  <div className="font-bold text-lg text-black">{docCode}</div>
-                </div>
+        <div className="grid flex-1 overflow-y-auto lg:grid-cols-[1.35fr_0.65fr]">
+          <main className="space-y-7 p-6 sm:p-8">
+            <section>
+              <div className="mb-4 flex items-center gap-2 text-white">
+                <Settings2 size={18} className="text-blue-300" />
+                <h3 className="font-bold">Identificação e controle</h3>
               </div>
-              
-              <div className="grid grid-cols-4 gap-4 text-sm">
-                <div className="bg-white p-2 rounded border border-gray-300">
-                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Revisão</div>
-                  <div className="font-bold text-black text-base">Rev. 01</div>
-                </div>
-                <div className="bg-white p-2 rounded border border-gray-300">
-                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Data</div>
-                  <div className="font-bold text-black text-base">{today}</div>
-                </div>
-                <div className="bg-white p-2 rounded border border-gray-300">
-                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Elaborado por</div>
-                  <div className="font-bold text-black text-base truncate">{currentUser?.name || 'N/A'}</div>
-                </div>
-                <div className="bg-white p-2 rounded border border-gray-300">
-                  <div className="text-xs text-gray-700 mb-1 font-semibold uppercase">Aprovado por</div>
-                  <div className="font-bold text-gray-500 text-base">________________</div>
-                </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Código do documento
+                  <input value={documentCode} onChange={(event) => setDocumentCode(event.target.value)} className={fieldClass} />
+                </label>
+                <label className="space-y-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Revisão
+                  <input value={revision} onChange={(event) => setRevision(event.target.value)} className={fieldClass} />
+                </label>
+                <label className="space-y-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Setor
+                  <input value={sector} onChange={(event) => setSector(event.target.value)} className={fieldClass} />
+                </label>
+                <label className="space-y-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Equipamento
+                  <input value={equipment} onChange={(event) => setEquipment(event.target.value)} className={fieldClass} />
+                </label>
+                <label className="space-y-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Elaborado por
+                  <input value={preparedBy} onChange={(event) => setPreparedBy(event.target.value)} className={fieldClass} />
+                </label>
+                <label className="space-y-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Aprovado por
+                  <input value={approvedBy} onChange={(event) => setApprovedBy(event.target.value)} className={fieldClass} />
+                </label>
+                <label className="space-y-2 text-xs font-semibold uppercase tracking-wider text-slate-400 sm:col-span-2">
+                  Data de vigência
+                  <input value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} className={fieldClass} />
+                </label>
               </div>
-            </div>
+            </section>
 
-            {/* Objective Section */}
-            {rootNode && (
-              <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
-                <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
-                  1. OBJETIVO
-                </div>
-                <p className="text-base leading-relaxed text-gray-800">
-                  Esta instrução tem por objetivo orientar os colaboradores sobre o procedimento operacional
-                  <strong className="text-black"> "{rootNode.data.label}"</strong>, estabelecendo as etapas necessárias para execução segura e eficiente das atividades.
-                </p>
+            <section>
+              <h3 className="mb-4 font-bold text-white">Conteúdo do documento</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  { checked: includeTechnical, set: setIncludeTechnical, title: 'Controles técnicos', text: 'CTQ, inspeção, IATF, risco e aprovação.' },
+                  { checked: includeTasks, set: setIncludeTasks, title: 'Instruções de execução', text: 'Tarefas, como executar e critérios OK/NOK.' },
+                  { checked: includeRecords, set: setIncludeRecords, title: 'Registros e evidências', text: 'Comprovação, rastreabilidade e assinaturas.' },
+                  { checked: includeTroubleshooting, set: setIncludeTroubleshooting, title: 'Falhas e reação', text: 'Causas, contenção, parada e escalonamento.' },
+                ].map((item) => (
+                  <label key={item.title} className="flex cursor-pointer gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-400/35 hover:bg-blue-500/5">
+                    <input type="checkbox" checked={item.checked} onChange={(event) => item.set(event.target.checked)} className="mt-1 h-4 w-4 accent-blue-500" />
+                    <span>
+                      <span className="block text-sm font-bold text-slate-100">{item.title}</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-500">{item.text}</span>
+                    </span>
+                  </label>
+                ))}
               </div>
-            )}
+            </section>
 
-            {/* Scope Section */}
-            <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
-              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
-                2. ESCOPO
-              </div>
-              <p className="text-base leading-relaxed text-gray-800">
-                Esta instrução se aplica a todos os colaboradores envolvidos na operação de <strong className="text-black">{mapTitle}</strong>,
-                incluindo operadores, técnicos e supervisores.
-              </p>
-            </div>
+            {errorMessage && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</div>}
+          </main>
 
-            {/* Legend */}
-            <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
-              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
-                3. LEGENDA DOS SÍMBOLOS
-              </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 border-2 border-blue-800 shadow-sm flex-shrink-0"></div>
-                  <span className="font-medium text-gray-900">Início do processo</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
-                  <div className="w-5 h-5 bg-emerald-600 rounded border-2 border-emerald-800 shadow-sm flex-shrink-0"></div>
-                  <span className="font-medium text-gray-900">Processo/Operação</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
-                  <div className="w-5 h-5 rounded-full bg-amber-500 border-2 border-amber-700 shadow-sm flex-shrink-0"></div>
-                  <span className="font-medium text-gray-900">Decisão/Verificação</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
-                  <div className="w-5 h-5 bg-purple-600 rotate-45 border-2 border-purple-800 shadow-sm flex-shrink-0"></div>
-                  <span className="font-medium text-gray-900">Documento</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
-                  <div className="w-5 h-5 bg-red-600 rounded-full border-2 border-red-800 shadow-sm flex-shrink-0"></div>
-                  <span className="font-medium text-gray-900">Alerta/Segurança</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded border border-gray-200">
-                  <div className="w-5 h-5 bg-gray-700 rounded border-2 border-gray-900 shadow-sm flex-shrink-0"></div>
-                  <span className="font-medium text-gray-900">Fim do processo</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Procedure Steps */}
-            <div className="mb-6 border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
-              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
-                4. DESENVOLVIMENTO DA OPERAÇÃO
-              </div>
-
-              {phases.length === 0 ? (
-                <div className="text-center text-gray-600 py-8 font-medium">
-                  Nenhuma etapa definida no mapa mental
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {phases.map((phase, phaseIndex) => (
-                    <div key={phaseIndex} className="border-2 border-gray-400 p-3 print:border-2 print:border-gray-400 bg-gray-50">
-                      {/* Phase Header */}
-                      <div className="font-bold text-base uppercase bg-gray-300 px-3 py-2 -mx-3 -mt-3 mb-3 border-b-2 border-gray-400 print:bg-gray-300 print:border-b-2 text-gray-900">
-                        FASE {phaseIndex + 1}: {phase.title}
-                      </div>
-
-                      {/* Steps Table */}
-                      <table className="w-full text-sm border-collapse border-2 border-gray-600">
-                        <thead>
-                          <tr className="border-b-2 border-gray-600 bg-gray-200 print:bg-gray-200">
-                            <th className="text-left p-3 border-r-2 border-gray-600 w-20 font-bold text-gray-900">ETAPA</th>
-                            <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">DESCRIÇÃO DA ATIVIDADE</th>
-                            <th className="text-left p-3 font-bold text-gray-900">OBSERVAÇÕES</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {phase.steps.map((step, stepIndex) => (
-                            <tr key={stepIndex} className={stepIndex % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                              <td className="p-3 border-r-2 border-gray-400 align-top font-mono text-sm font-bold text-gray-800">
-                                {step.stepNumber}
-                              </td>
-                              <td className="p-3 border-r-2 border-gray-400 align-top">
-                                <div className="font-bold text-gray-900 text-sm">{step.node.data.label}</div>
-                                {step.node.data.description && (
-                                  <div className="text-gray-700 mt-1 text-xs leading-relaxed">
-                                    {step.node.data.description}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3 align-top">
-                                {step.node.data.nodeType === 'decision' && (
-                                  <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold bg-amber-100 px-2 py-1 rounded">
-                                    ⚠️ Verificar condição
-                                  </span>
-                                )}
-                                {step.node.data.nodeType === 'document' && (
-                                  <span className="inline-flex items-center gap-1 text-blue-700 text-xs font-bold bg-blue-100 px-2 py-1 rounded">
-                                    📄 Gerar documentação
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+          <aside className="border-t border-white/10 bg-[#0c1729] p-6 sm:p-8 lg:border-l lg:border-t-0">
+            <div className="sticky top-0 space-y-5">
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.07] p-5">
+                <div className="mb-3 flex items-center gap-2 font-bold text-emerald-300"><ShieldCheck size={20} /> Estrutura profissional</div>
+                <ul className="space-y-2 text-sm leading-relaxed text-slate-300">
+                  {['Capa e identificação documental', 'Definições de Procedimento, Instrução e Registro', 'Hierarquia numerada do mapa', 'Controle de revisão e assinaturas', 'Cabeçalho, rodapé e páginas numeradas'].map((text) => (
+                    <li key={text} className="flex gap-2"><CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-400" />{text}</li>
                   ))}
-                </div>
-              )}
-            </div>
-
-            {/* Safety Warnings */}
-            <div className="mb-6 border-2 border-red-600 p-4 print:border-2 print:border-red-600 bg-red-50">
-              <div className="font-bold text-base uppercase bg-red-600 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-red-600 print:text-white shadow-sm flex items-center gap-2">
-                ⚠️ OBSERVAÇÕES DE SEGURANÇA
+                </ul>
               </div>
-              <ul className="text-base space-y-3 list-disc list-inside text-gray-800">
-                <li className="font-medium">Utilizar sempre os EPIs adequados (óculos, luvas, protetor auricular conforme necessário)</li>
-                <li className="font-medium">Verificar condições das máquinas e equipamentos antes de iniciar</li>
-                <li className="font-medium">Em caso de dúvida, consultar o supervisor antes de prosseguir</li>
-                <li className="font-medium">Manter a área de trabalho limpa e organizada</li>
-              </ul>
-            </div>
 
-            {/* Approval Signatures */}
-            <div className="border-2 border-gray-800 p-4 print:border-2 print:border-gray-800 bg-white">
-              <div className="font-bold text-base uppercase bg-gray-800 text-white px-4 py-2 -mx-4 -mt-4 mb-4 w-fit print:bg-gray-800 print:text-white shadow-sm">
-                5. CONTROLE DE REVISÕES
+              <div className="grid grid-cols-2 gap-3">
+                {[['Nós', stats.nodes], ['Instruções', stats.instructions], ['Registros', stats.records], ['Riscos altos', stats.risks]].map(([label, value]) => (
+                  <div key={String(label)} className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
+                    <div className="mt-1 text-xl font-bold text-white">{value}</div>
+                  </div>
+                ))}
               </div>
-              <table className="w-full text-base border-collapse border-2 border-gray-600">
-                <thead>
-                  <tr className="border-b-2 border-gray-600 bg-gray-200 print:bg-gray-200">
-                    <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">REV.</th>
-                    <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">DATA</th>
-                    <th className="text-left p-3 border-r-2 border-gray-600 font-bold text-gray-900">DESCRIÇÃO</th>
-                    <th className="text-left p-3 font-bold text-gray-900">RESPONSÁVEL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="bg-white">
-                    <td className="p-3 border-r-2 border-gray-400 font-bold">01</td>
-                    <td className="p-3 border-r-2 border-gray-400">{today}</td>
-                    <td className="p-3 border-r-2 border-gray-400">Emissão inicial</td>
-                    <td className="p-3 font-medium">{currentUser?.name || 'N/A'}</td>
-                  </tr>
-                  <tr className="bg-gray-50">
-                    <td className="p-3 border-r-2 border-gray-400">&nbsp;</td>
-                    <td className="p-3 border-r-2 border-gray-400">&nbsp;</td>
-                    <td className="p-3 border-r-2 border-gray-400">&nbsp;</td>
-                    <td className="p-3">&nbsp;</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
 
-            {/* Document Footer */}
-            <div className="mt-6 pt-4 border-t-2 border-gray-400 text-center text-sm text-gray-600 print:border-t-2">
-              <p className="font-medium">Documento gerado automaticamente pelo sistema TecnoMapper</p>
-              <p className="text-xs mt-1">{today} • {currentUser?.email || 'sistema'}</p>
-            </div>
+              <div className="rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-4 text-xs leading-relaxed text-amber-100/80">
+                Campos não preenchidos no mapa não serão inventados. O Word indicará “A definir” somente nos controles obrigatórios, facilitando a revisão antes da aprovação.
+              </div>
 
-          </div>
+              <button
+                onClick={handleGenerateWord}
+                disabled={isGenerating || !nodes.length}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 font-bold text-white shadow-lg shadow-blue-900/30 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGenerating ? <Loader2 size={19} className="animate-spin" /> : <Download size={19} />}
+                {isGenerating ? 'Gerando documento...' : 'Gerar Word (.docx)'}
+              </button>
+              <p className="text-center text-xs leading-relaxed text-slate-500">Abra o arquivo no Word para revisar, aprovar e imprimir com a paginação correta.</p>
+            </div>
+          </aside>
         </div>
       </div>
-
-      {/* Print Styles */}
-      <style>{`
-        @media print {
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          body {
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
-          }
-        }
-      `}</style>
     </div>
   );
 }

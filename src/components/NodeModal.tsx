@@ -5,6 +5,17 @@ import { cn } from '../lib/utils';
 import { useComments } from '../hooks/useComments';
 import { CommentsPanel } from './CommentsPanel';
 import { ActionFlow } from './ActionFlow';
+import { SmartTextArea, WritingSuggestionProvider } from './SmartTextArea';
+import {
+  ADVANCED_NODE_TYPE_OPTIONS,
+  RISK_OPTIONS,
+  SEVERITY_OPTIONS,
+  VISUAL_PRIORITY_OPTIONS,
+  createDefaultOperationalMetadata,
+  normalizeOperationalMetadata,
+  type OperationalModeName,
+  type OperationalNodeMetadata,
+} from '../lib/operationalModel';
 
 interface AttachedFile {
   id: string;
@@ -51,6 +62,7 @@ export interface NodeDetails {
   ifOK?: FlowOutcome;
   ifNOK?: FlowOutcome;
   tips?: QuickTip[];
+  operational?: OperationalNodeMetadata;
 }
 
 interface NodeModalProps {
@@ -62,6 +74,9 @@ interface NodeModalProps {
   onUpdateDetails: (id: string, newDetails: NodeDetails | ((prev: NodeDetails) => NodeDetails)) => void;
   onUpdateNodeLabel?: (id: string, newLabel: string) => void;
   currentUser?: { name: string; email: string; role: string } | null;
+  suggestionCorpus?: string[];
+  writingSuggestionsEnabled?: boolean;
+  onWritingSuggestionsEnabledChange?: (enabled: boolean) => void;
 }
 
 // Task Editor Component for managing guide, files and images per task
@@ -76,30 +91,35 @@ interface TaskEditorProps {
 function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: TaskEditorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'guide' | 'files' | 'images'>('guide');
+  const howToSteps = Array.isArray(task?.howTo) ? task.howTo : [];
+  const attachedFiles = Array.isArray(task?.files) ? task.files : [];
+  const taskImages = Array.isArray(task?.images) ? task.images : [];
+  const taskText = typeof task?.text === 'string' ? task.text : '';
+  const guideStepsCount = howToSteps.length;
 
   // Add howTo step
   const addHowToStep = () => {
     const newStep: HowToStep = {
-      order: (task.howTo?.length || 0) + 1,
+      order: howToSteps.length + 1,
       instruction: "Nova instrução...",
       visualHint: "Dica visual..."
     };
     onUpdateTask({
       ...task,
-      howTo: [...(task.howTo || []), newStep]
+      howTo: [...howToSteps, newStep]
     });
   };
 
   // Update howTo step
   const updateHowToStep = (index: number, field: keyof HowToStep, value: string | number) => {
-    const newHowTo = [...(task.howTo || [])];
+    const newHowTo = [...howToSteps];
     newHowTo[index] = { ...newHowTo[index], [field]: value };
     onUpdateTask({ ...task, howTo: newHowTo });
   };
 
   // Remove howTo step
   const removeHowToStep = (index: number) => {
-    const newHowTo = (task.howTo || []).filter((_, i) => i !== index)
+    const newHowTo = howToSteps.filter((_, i) => i !== index)
       .map((step, i) => ({ ...step, order: i + 1 }));
     onUpdateTask({ ...task, howTo: newHowTo });
   };
@@ -126,7 +146,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
         url,
         type
       };
-      onUpdateTask({ ...task, files: [...(task.files || []), newFile] });
+      onUpdateTask({ ...task, files: [...attachedFiles, newFile] });
     }
   };
 
@@ -134,7 +154,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
   const removeFile = (fileId: string) => {
     onUpdateTask({
       ...task,
-      files: (task.files || []).filter(f => f.id !== fileId)
+      files: attachedFiles.filter(f => f.id !== fileId)
     });
   };
 
@@ -142,7 +162,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
   const addImage = () => {
     const url = prompt("URL da imagem:");
     if (url) {
-      onUpdateTask({ ...task, images: [...(task.images || []), url] });
+      onUpdateTask({ ...task, images: [...taskImages, url] });
     }
   };
 
@@ -150,13 +170,19 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
   const removeImage = (index: number) => {
     onUpdateTask({
       ...task,
-      images: (task.images || []).filter((_, i) => i !== index)
+      images: taskImages.filter((_, i) => i !== index)
     });
   };
 
-  const hasGuide = task.howTo || task.ifOK || task.ifNOK;
-  const hasFiles = task.files && task.files.length > 0;
-  const hasImages = task.images && task.images.length > 0;
+  const hasGuide = howToSteps.length > 0 || Boolean(task.ifOK) || Boolean(task.ifNOK);
+  const hasFiles = attachedFiles.length > 0;
+  const hasImages = taskImages.length > 0;
+
+  const openGuideEditor = () => {
+    setIsExpanded(true);
+    setActiveTab('guide');
+  };
+
 
   return (
     <div className="border border-white/10 rounded-xl bg-white/5 overflow-hidden">
@@ -206,6 +232,21 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
         </div>
       </div>
 
+      <div className="px-3 pb-3 -mt-1 flex flex-wrap items-center gap-2">
+        <p className="text-[11px] text-slate-500">
+          {guideStepsCount > 0 ?
+             `${guideStepsCount} passo(s) cadastrados em "Como executar"`
+            : 'Ainda sem passo a passo. Cadastre aqui o "Como executar" desta ação.'}
+        </p>
+        <button
+          onClick={openGuideEditor}
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/20 transition-colors"
+        >
+          <Workflow size={12} />
+          {guideStepsCount > 0 ? 'Editar passo a passo' : 'Criar passo a passo'}
+        </button>
+      </div>
+
       {/* Expanded Content */}
       {isExpanded && (
         <div className="border-t border-white/10 p-3 space-y-3">
@@ -218,7 +259,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
                 activeTab === 'guide' ? "bg-blue-500/20 text-blue-300" : "text-slate-400 hover:text-slate-300"
               )}
             >
-              📖 Guia ({task.howTo?.length || 0} passos)
+              Guia ({guideStepsCount} passos)
             </button>
             <button
               onClick={() => setActiveTab('files')}
@@ -227,7 +268,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
                 activeTab === 'files' ? "bg-blue-500/20 text-blue-300" : "text-slate-400 hover:text-slate-300"
               )}
             >
-              📎 Arquivos ({task.files?.length || 0})
+              Arquivos ({attachedFiles.length})
             </button>
             <button
               onClick={() => setActiveTab('images')}
@@ -236,7 +277,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
                 activeTab === 'images' ? "bg-blue-500/20 text-blue-300" : "text-slate-400 hover:text-slate-300"
               )}
             >
-              🖼️ Imagens ({task.images?.length || 0})
+              Imagens ({taskImages.length})
             </button>
           </div>
 
@@ -254,7 +295,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
                     <Plus size={12} /> Adicionar Passo
                   </button>
                 </div>
-                {task.howTo?.map((step, idx) => (
+                {howToSteps.map((step, idx) => (
                   <div key={idx} className="flex gap-2 items-start p-2 bg-white/5 rounded-lg">
                     <span className="text-xs font-bold text-blue-400 w-5">{step.order}</span>
                     <div className="flex-1 space-y-2">
@@ -285,7 +326,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
 
               {/* If OK */}
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg space-y-2">
-                <h4 className="text-xs font-medium text-emerald-300">✅ Se OK (Quando der certo)</h4>
+                <h4 className="text-xs font-medium text-emerald-300"> Se OK (Quando der certo)</h4>
                 <input
                   type="text"
                   value={task.ifOK?.result || ''}
@@ -311,7 +352,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
 
               {/* If NOK */}
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg space-y-2">
-                <h4 className="text-xs font-medium text-red-300">❌ Se NOK (Quando der errado)</h4>
+                <h4 className="text-xs font-medium text-red-300">Se NOK (Quando der errado)</h4>
                 <input
                   type="text"
                   value={task.ifNOK?.result || ''}
@@ -349,10 +390,10 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
                   <Plus size={12} /> Adicionar Arquivo
                 </button>
               </div>
-              {task.files?.map((file) => (
+              {attachedFiles.map((file) => (
                 <div key={file.id} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
                   <span className="text-lg">
-                    {file.type === 'pdf' ? '📄' : file.type === 'doc' ? '📝' : file.type === 'xls' ? '📊' : '📎'}
+                    {file.type === 'pdf' ? 'PDF' : file.type === 'doc' ? 'DOC' : file.type === 'xls' ? 'XLS' : 'ARQ'}
                   </span>
                   <span className="flex-1 text-xs text-slate-300 truncate">{file.name}</span>
                   <a
@@ -379,8 +420,8 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <div>
-                  <h4 className="text-xs font-medium text-slate-300">Imagens desta Ação</h4>
-                  <p className="text-[10px] text-slate-500">Específicas para: {task.text.substring(0, 30)}{task.text.length > 30 ? '...' : ''}</p>
+                  <h4 className="text-xs font-medium text-slate-300">Imagens desta ação</h4>
+                  <p className="text-[10px] text-slate-500">Específicas para: {taskText.substring(0, 30)}{taskText.length > 30 ? '...' : ''}</p>
                 </div>
                 <button
                   onClick={addImage}
@@ -390,7 +431,7 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {task.images?.map((img, idx) => (
+                {taskImages.map((img, idx) => (
                   <div key={idx} className="relative group">
                     <img src={img} alt={`Imagem ${idx + 1}`} className="w-full h-20 object-cover rounded-lg" />
                     <button
@@ -410,19 +451,108 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
   );
 }
 
-export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdateDetails, onUpdateNodeLabel, currentUser }: NodeModalProps) {
+const parseListValue = (value: string) =>
+  value
+    .split(/\r\n|;/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+function OperationalListEditor({
+  label,
+  value,
+  placeholder,
+  onChange,
+  suggestionCorpus,
+}: {
+  label: string;
+  value: string[];
+  placeholder: string;
+  onChange: (value: string[]) => void;
+  suggestionCorpus?: string[];
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest">{label}</label>
+      <SmartTextArea
+        value={value.join('\n')}
+        onValueChange={(nextValue) => onChange(parseListValue(nextValue))}
+        corpus={suggestionCorpus}
+        placeholder={placeholder}
+        className="w-full min-h-[86px] p-3 pb-12 text-xs rounded-xl border border-white/10 bg-white/5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-y"
+      />
+      <p className="text-[10px] text-slate-500">Use uma linha por item.</p>
+    </div>
+  );
+}
+
+export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetails, onUpdateDetails, onUpdateNodeLabel, currentUser, suggestionCorpus = [], writingSuggestionsEnabled = true, onWritingSuggestionsEnabledChange }: NodeModalProps) {
+  const safeNodeData = nodeData || {};
+  const details: NodeDetails = {
+    ...(rawDetails || {}),
+    description: typeof rawDetails?.description === 'string' ? rawDetails.description : '',
+    images: Array.isArray(rawDetails?.images) ? rawDetails.images : [],
+    tasks: Array.isArray(rawDetails?.tasks)
+      ? rawDetails.tasks.filter(Boolean).map((task, index) => ({
+          ...task,
+          id: String(task?.id || `${nodeId}-task-${index + 1}`),
+          text: typeof task?.text === 'string' ? task.text : `Ação ${index + 1}`,
+          completed: Boolean(task?.completed),
+          howTo: Array.isArray(task?.howTo) ? task.howTo.filter(Boolean) : [],
+          images: Array.isArray(task?.images) ? task.images.filter(Boolean) : [],
+          files: Array.isArray(task?.files) ? task.files.filter(Boolean) : [],
+        }))
+      : [],
+  };
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [urlError, setUrlError] = useState('');
   const [isEditingLabel, setIsEditingLabel] = useState(false);
-  const [labelValue, setLabelValue] = useState(nodeData?.label || '');
+  const [labelValue, setLabelValue] = useState(safeNodeData.label || '');
+  const operational = normalizeOperationalMetadata(details.operational, safeNodeData);
+
+  const updateOperational = <K extends keyof OperationalNodeMetadata>(field: K, value: OperationalNodeMetadata[K]) => {
+    onUpdateDetails(nodeId, {
+      ...details,
+      operational: {
+        ...operational,
+        [field]: value,
+      },
+    });
+  };
+
+  const updateReactionPlan = <K extends keyof OperationalNodeMetadata['reactionPlan']>(
+    field: K,
+    value: OperationalNodeMetadata['reactionPlan'][K],
+  ) => {
+    updateOperational('reactionPlan', {
+      ...operational.reactionPlan,
+      [field]: value,
+    });
+  };
+
+  const updateTroubleshooting = <K extends keyof OperationalNodeMetadata['troubleshooting']>(
+    field: K,
+    value: OperationalNodeMetadata['troubleshooting'][K],
+  ) => {
+    updateOperational('troubleshooting', {
+      ...operational.troubleshooting,
+      [field]: value,
+    });
+  };
+
+  const toggleOperationalMode = (mode: OperationalModeName) => {
+    const nextModes = operational.operationalMode.includes(mode) ?
+       operational.operationalMode.filter((entry) => entry !== mode)
+      : [...operational.operationalMode, mode];
+    updateOperational('operationalMode', nextModes);
+  };
 
   // Update label value when nodeData changes
   useEffect(() => {
-    setLabelValue(nodeData?.label || '');
-  }, [nodeData?.label]);
+    setLabelValue(safeNodeData.label || '');
+  }, [safeNodeData.label]);
 
   const handleLabelSave = () => {
     if (labelValue.trim() && labelValue !== nodeData?.label && onUpdateNodeLabel) {
@@ -432,7 +562,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
   };
 
   const handleLabelCancel = () => {
-    setLabelValue(nodeData?.label || '');
+    setLabelValue(safeNodeData.label || '');
     setIsEditingLabel(false);
   };
 
@@ -536,7 +666,12 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
     }
   };
 
+
+  const hasTaskImages = Boolean(details.tasks.some((task) => task.images && task.images.length > 0));
+  const generalMediaCount = details.images.length || 0;
+
   return (
+    <WritingSuggestionProvider corpus={suggestionCorpus} enabled={writingSuggestionsEnabled}>
     <AnimatePresence>
       {isOpen && nodeData && (
         <>
@@ -553,7 +688,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="pointer-events-auto w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-black/40 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-3xl"
+              className="pointer-events-auto w-full max-w-[96vw] xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] overflow-hidden flex flex-col bg-black/40 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-3xl"
             >
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-white/10 bg-white/5">
@@ -597,7 +732,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                           onClick={() => setIsEditingLabel(true)}
                           title="Clique para editar"
                         >
-                          {nodeData.label}
+                          {safeNodeData.label || 'Nó sem título'}
                         </h2>
                         <button
                           onClick={() => setIsEditingLabel(true)}
@@ -610,12 +745,28 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                     )}
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-xs text-slate-400 uppercase tracking-widest font-semibold">
-                        {nodeData.category}
+                        {safeNodeData.category || safeNodeData.nodeType || 'processo'}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {onWritingSuggestionsEnabledChange && (
+                    <button
+                      type="button"
+                      onClick={() => onWritingSuggestionsEnabledChange(!writingSuggestionsEnabled)}
+                      className={cn(
+                        'hidden sm:flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors',
+                        writingSuggestionsEnabled
+                          ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-200'
+                          : 'border-white/10 bg-white/5 text-slate-500 hover:text-slate-300',
+                      )}
+                      title="Sugestões locais de palavras e frases. Use Tab para aceitar."
+                    >
+                      <span className="text-sm">✦</span>
+                      Sugestões {writingSuggestionsEnabled ? 'ativas' : 'desativadas'}
+                    </button>
+                  )}
                   <button
                     onClick={() => setIsCommentsOpen(true)}
                     className="p-3 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors relative"
@@ -638,24 +789,366 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
               </div>
 
               {/* Content Grid */}
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col lg:flex-row gap-8">
+              <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
                 {/* Left Column: Info & Tasks */}
-                <div className="flex-1 flex flex-col gap-8">
-                  <section>
+                <div className="contents">
+                  <section className="xl:order-1 xl:col-span-7 rounded-2xl border border-white/10 bg-white/[0.035] p-5">
                     <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest mb-3 flex items-center gap-2">
                       Detalhes Analíticos
                     </h3>
-                    <textarea
+                    <SmartTextArea
                       value={details.description}
-                      onChange={(e) => onUpdateDetails(nodeId, { ...details, description: e.target.value })}
-                      className="w-full h-40 p-4 text-sm rounded-xl border border-white/10 bg-white/5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none shadow-inner"
+                      onValueChange={(description) => onUpdateDetails(nodeId, { ...details, description })}
+                      corpus={suggestionCorpus}
+                      className="w-full h-40 p-4 pb-14 text-sm rounded-xl border border-white/10 bg-white/5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none shadow-inner"
                       placeholder="Descreva o contexto, especificações ou impactos deste nó no processo..."
                     />
                   </section>
 
+                  <section className="xl:order-3 xl:col-span-12 rounded-2xl border border-white/10 bg-white/[0.035] p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest">
+                          Inteligência Operacional
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Configure criticidade, CTQ, auditoria, reação, troubleshooting e rastreabilidade.
+                        </p>
+                      </div>
+                      <div className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 font-semibold whitespace-nowrap">
+                        {ADVANCED_NODE_TYPE_OPTIONS.find((item) => item.value === operational.nodeTypeAdvanced)?.label || 'Operação'}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Tipo avançado</label>
+                        <select
+                          value={operational.nodeTypeAdvanced}
+                          onChange={(e) => {
+                            const nextMeta = createDefaultOperationalMetadata({
+                              ...operational,
+                              nodeTypeAdvanced: e.target.value as OperationalNodeMetadata['nodeTypeAdvanced'],
+                            });
+                            onUpdateDetails(nodeId, { ...details, operational: nextMeta });
+                          }}
+                          className="w-full bg-[#1e293b] border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none hover:border-white/20 focus:border-blue-500/50 transition-colors"
+                        >
+                          {ADVANCED_NODE_TYPE_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Severidade</label>
+                        <select
+                          value={operational.severity}
+                          onChange={(e) => updateOperational('severity', e.target.value as OperationalNodeMetadata['severity'])}
+                          className="w-full bg-[#1e293b] border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none hover:border-white/20 focus:border-blue-500/50 transition-colors"
+                        >
+                          {SEVERITY_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Risco</label>
+                        <select
+                          value={operational.riskLevel}
+                          onChange={(e) => updateOperational('riskLevel', e.target.value as OperationalNodeMetadata['riskLevel'])}
+                          className="w-full bg-[#1e293b] border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none hover:border-white/20 focus:border-blue-500/50 transition-colors"
+                        >
+                          {RISK_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Prioridade visual</label>
+                        <select
+                          value={operational.visualPriority}
+                          onChange={(e) => updateOperational('visualPriority', e.target.value as OperationalNodeMetadata['visualPriority'])}
+                          className="w-full bg-[#1e293b] border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none hover:border-white/20 focus:border-blue-500/50 transition-colors"
+                        >
+                          {VISUAL_PRIORITY_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Frequência de inspeção</label>
+                        <input
+                          type="text"
+                          value={operational.inspectionFrequency}
+                          onChange={(e) => updateOperational('inspectionFrequency', e.target.value)}
+                          placeholder="Ex: 1ª peça + a cada 2 horas"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none focus:border-blue-500/50 focus:bg-white/10 transition-colors"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Requisito IATF</label>
+                        <input
+                          type="text"
+                          value={operational.requiredIATF}
+                          onChange={(e) => updateOperational('requiredIATF', e.target.value)}
+                          placeholder="Ex: 8.5.1.3"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none focus:border-blue-500/50 focus:bg-white/10 transition-colors"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Característica especial / CTQ</label>
+                        <input
+                          type="text"
+                          value={operational.specialCharacteristic}
+                          onChange={(e) => updateOperational('specialCharacteristic', e.target.value)}
+                          placeholder="Ex: perpendicularidade / comprimento crítico"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none focus:border-blue-500/50 focus:bg-white/10 transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Impacto / requisito do cliente</label>
+                        <input
+                          type="text"
+                          value={operational.customer}
+                          onChange={(e) => updateOperational('customer', e.target.value)}
+                          placeholder="Ex: cliente automotivo / superfície visível"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none focus:border-blue-500/50 focus:bg-white/10 transition-colors"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Rastreabilidade / registro mestre</label>
+                        <input
+                          type="text"
+                          value={operational.traceability}
+                          onChange={(e) => updateOperational('traceability', e.target.value)}
+                          placeholder="Ex: lote MP + ficha dimensional + etiqueta final"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 outline-none focus:border-blue-500/50 focus:bg-white/10 transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+                      {[
+                        { key: 'ctq', label: 'CTQ / característica especial' },
+                        { key: 'auditRequired', label: 'Exige auditoria em processo' },
+                        { key: 'requiresEvidence', label: 'Exige evidência obrigatória' },
+                        { key: 'requiresApproval', label: 'Exige aprovação / liberação' },
+                      ].map((item) => {
+                        const currentValue = Boolean(operational[item.key as keyof OperationalNodeMetadata]);
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => updateOperational(item.key as keyof OperationalNodeMetadata, (!currentValue) as never)}
+                            className={cn(
+                              'text-left px-3 py-3 rounded-xl border transition-colors',
+                              currentValue ?
+                                 'bg-blue-500/15 border-blue-500/30 text-blue-200'
+                                : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200',
+                            )}
+                          >
+                            <span className="block text-xs font-semibold leading-snug">{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Modos operacionais aplicáveis</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['operator', 'quality', 'audit', 'troubleshooting', 'training'] as OperationalModeName[]).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => toggleOperationalMode(mode)}
+                            className={cn(
+                              'px-3 py-2 rounded-full text-xs font-semibold border transition-colors',
+                              operational.operationalMode.includes(mode) ?
+                                 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200'
+                                : 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200',
+                            )}
+                          >
+                            {mode === 'operator' && 'Operador'}
+                            {mode === 'quality' && 'Qualidade'}
+                            {mode === 'audit' && 'Auditoria'}
+                            {mode === 'troubleshooting' && 'Troubleshooting'}
+                            {mode === 'training' && 'Treinamento'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      <OperationalListEditor
+                        label="Critrios de aprovação"
+                        value={operational.approvalCriteria}
+                        placeholder="Ex: medida dentro da tolerância&#10;etiqueta legível&#10;registro preenchido"
+                        onChange={(value) => updateOperational('approvalCriteria', value)}
+                      />
+                      <OperationalListEditor
+                        label="Registros obrigatórios"
+                        value={operational.requiredRecords}
+                        placeholder="Ex: ficha de inspeção&#10;check-list de setup&#10;registro do lote"
+                        onChange={(value) => updateOperational('requiredRecords', value)}
+                      />
+                      <OperationalListEditor
+                        label="Fluxo OK / liberação"
+                        value={operational.okFlow}
+                        placeholder="Ex: liberar produção&#10;registrar aprovação&#10;seguir processo"
+                        onChange={(value) => updateOperational('okFlow', value)}
+                      />
+                      <OperationalListEditor
+                        label="Fluxo NOK / contenção"
+                        value={operational.nokFlow}
+                        placeholder="Ex: parar máquina&#10;segregar lote&#10;chamar qualidade"
+                        onChange={(value) => updateOperational('nokFlow', value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      <OperationalListEditor
+                        label="Evidências esperadas"
+                        value={operational.evidenceExamples}
+                        placeholder="Ex: foto da peça&#10;assinatura do inspetor&#10;print do sistema"
+                        onChange={(value) => updateOperational('evidenceExamples', value)}
+                      />
+                      <OperationalListEditor
+                        label="Lições aprendidas"
+                        value={operational.lessonsLearned}
+                        placeholder="Ex: revisar batente a cada troca&#10;validar disco antes da partida"
+                        onChange={(value) => updateOperational('lessonsLearned', value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      <div className="space-y-3 p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
+                        <div>
+                          <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-widest">Plano de reação</h4>
+                          <p className="text-[11px] text-slate-500 mt-1">Plano padrão de ao em desvio, contenção e escalonamento.</p>
+                        </div>
+                        <input
+                          type="text"
+                          value={operational.reactionPlan.trigger}
+                          onChange={(e) => updateReactionPlan('trigger', e.target.value)}
+                          placeholder="Gatilho do plano de reação"
+                          className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500/40"
+                        />
+                        <input
+                          type="text"
+                          value={operational.reactionPlan.owner}
+                          onChange={(e) => updateReactionPlan('owner', e.target.value)}
+                          placeholder="Responsável pelo escalonamento"
+                          className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500/40"
+                        />
+                        <OperationalListEditor
+                          label="Ações imediatas"
+                          value={operational.reactionPlan.actions}
+                          placeholder="Ex: interromper operação&#10;validar ltimas peças"
+                          onChange={(value) => updateReactionPlan('actions', value)}
+                        />
+                        <OperationalListEditor
+                          label="Conteno"
+                          value={operational.reactionPlan.containmentActions}
+                          placeholder="Ex: bloquear lote&#10;abrir ocorrência"
+                          onChange={(value) => updateReactionPlan('containmentActions', value)}
+                        />
+                        <OperationalListEditor
+                          label="Escalonamento"
+                          value={operational.reactionPlan.escalationActions}
+                          placeholder="Ex: acionar qualidade&#10;chamar engenharia"
+                          onChange={(value) => updateReactionPlan('escalationActions', value)}
+                        />
+                        <OperationalListEditor
+                          label="Quando parar produção"
+                          value={operational.reactionPlan.stopProductionCriteria}
+                          placeholder="Ex: 2 peças NOK seguidas&#10;risco ao operador"
+                          onChange={(value) => updateReactionPlan('stopProductionCriteria', value)}
+                        />
+                      </div>
+
+                      <div className="space-y-3 p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
+                        <div>
+                          <h4 className="text-xs font-bold text-amber-300 uppercase tracking-widest">Troubleshooting</h4>
+                          <p className="text-[11px] text-slate-500 mt-1">Falhas, sintomas, causas prováveis, parada e quem acionar.</p>
+                        </div>
+                        <OperationalListEditor
+                          label="Falhas comuns"
+                          value={operational.troubleshooting.commonFailures}
+                          placeholder="Ex: corte fora de esquadro&#10;rebarba excessiva"
+                          onChange={(value) => updateTroubleshooting('commonFailures', value)}
+                        />
+                        <OperationalListEditor
+                          label="Sintomas"
+                          value={operational.troubleshooting.symptoms}
+                          placeholder="Ex: variao dimensional&#10;marcas superficiais"
+                          onChange={(value) => updateTroubleshooting('symptoms', value)}
+                        />
+                        <OperationalListEditor
+                          label="Causas prováveis"
+                          value={operational.troubleshooting.probableCauses}
+                          placeholder="Ex: disco gasto&#10;perfil mal fixado"
+                          onChange={(value) => updateTroubleshooting('probableCauses', value)}
+                        />
+                        <OperationalListEditor
+                          label="Ações imediatas"
+                          value={operational.troubleshooting.immediateActions}
+                          placeholder="Ex: parar máquina&#10;refazer setup"
+                          onChange={(value) => updateTroubleshooting('immediateActions', value)}
+                        />
+                        <OperationalListEditor
+                          label="Quando parar a máquina"
+                          value={operational.troubleshooting.stopCriteria}
+                          placeholder="Ex: falha repetitiva&#10;risco ao operador"
+                          onChange={(value) => updateTroubleshooting('stopCriteria', value)}
+                        />
+                        <OperationalListEditor
+                          label="Quem acionar"
+                          value={operational.troubleshooting.whoToCall}
+                          placeholder="Ex: supervisor&#10;qualidade&#10;manuteno"
+                          onChange={(value) => updateTroubleshooting('whoToCall', value)}
+                        />
+                        <OperationalListEditor
+                          label="Evidáncia obrigatória"
+                          value={operational.troubleshooting.requiredEvidence}
+                          placeholder="Ex: foto da falha&#10;peça segregada identificada"
+                          onChange={(value) => updateTroubleshooting('requiredEvidence', value)}
+                        />
+                        <div className="space-y-2">
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest">Impacto no cliente</label>
+                          <textarea
+                            value={operational.troubleshooting.customerImpact}
+                            onChange={(e) => updateTroubleshooting('customerImpact', e.target.value)}
+                            placeholder="Explique o impacto provável no cliente ou no processo seguinte."
+                            className="w-full min-h-[90px] p-3 text-xs rounded-xl border border-white/10 bg-black/20 text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/30 resize-y"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
                   {/* Action Flow Guide - Didactic visualization */}
                   {(details.howTo || details.ifOK || details.ifNOK) && (
-                    <section>
+                    <section className="xl:order-4 xl:col-span-12 rounded-2xl border border-purple-500/15 bg-purple-500/[0.04] p-5">
                       <div className="flex items-center gap-2 mb-3">
                         <Workflow className="w-4 h-4 text-purple-400" />
                         <h3 className="text-sm font-bold text-purple-300 uppercase tracking-widest">
@@ -671,7 +1164,10 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                     </section>
                   )}
 
-                  <section>
+                  <section className={cn(
+                    'rounded-2xl border border-white/10 bg-white/[0.035] p-5',
+                    hasTaskImages ? 'xl:order-5 xl:col-span-7' : 'xl:order-5 xl:col-span-12',
+                  )}>
                     <div className="flex justify-between items-center mb-3">
                       <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest">
                         Ações & Evidências
@@ -698,7 +1194,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                               // Use functional update to ensure we have latest details
                               onUpdateDetails(nodeId, (prevDetails: NodeDetails) => {
                                 const currentDetails = prevDetails || details;
-                                const newTasks = currentDetails.tasks.map(t => t.id === task.id ? updatedTask : t);
+                                const currentTasks = Array.isArray(currentDetails.tasks) ? currentDetails.tasks : [];
+                                const newTasks = currentTasks.map(t => t.id === task.id ? updatedTask : t);
                                 return { ...currentDetails, tasks: newTasks };
                               });
                             }}
@@ -710,12 +1207,12 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
 
                   {/* Task Images Gallery - Separate section for all task images */}
                   {details.tasks && details.tasks.some(t => t.images && t.images.length > 0) && (
-                    <section className="mt-4 pt-4 border-t border-white/10">
+                    <section className="xl:order-6 xl:col-span-5 rounded-2xl border border-amber-500/15 bg-amber-500/[0.04] p-5">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <ImagePlus size={16} className="text-amber-400" />
                           <h3 className="text-sm font-bold text-amber-300 uppercase tracking-widest">
-                            Imagens das Ações
+                            Imagens das ações
                           </h3>
                           <span className="text-xs text-slate-500">
                             ({details.tasks.reduce((acc, t) => acc + (t.images?.length || 0), 0)} imagens)
@@ -725,7 +1222,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                           Imagens específicas de cada ação/evidência
                         </p>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 2xl:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1 custom-scrollbar">
                         {details.tasks.map(task => 
                           task.images?.map((img, idx) => (
                             <div key={`${task.id}-${idx}`} className="relative group">
@@ -741,7 +1238,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                                     const newImages = task.images?.filter((_, i) => i !== idx) || [];
                                     onUpdateDetails(nodeId, (prevDetails: NodeDetails) => {
                                       const currentDetails = prevDetails || details;
-                                      const newTasks = currentDetails.tasks.map(t => 
+                                      const currentTasks = Array.isArray(currentDetails.tasks) ? currentDetails.tasks : [];
+                                      const newTasks = currentTasks.map(t => 
                                         t.id === task.id ? { ...t, images: newImages } : t
                                       );
                                       return { ...currentDetails, tasks: newTasks };
@@ -761,16 +1259,23 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                 </div>
 
                 {/* Right Column: Media Gallery - Node Level Images */}
-                <div className="w-full lg:w-[400px] flex flex-col gap-4 border-l border-white/10 pl-6">
-                  <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                    <ImagePlus size={16} /> Imagens do Processo (Geral)
-                  </h3>
-                  <p className="text-xs text-slate-500">Imagens de referência geral deste nó/processo</p>
+                <div className="xl:order-2 xl:col-span-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                        <ImagePlus size={16} /> Imagens do Processo (Geral)
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-2">Imagens de referência geral deste nó/processo</p>
+                    </div>
+                    <div className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-slate-300 font-semibold whitespace-nowrap">
+                      {generalMediaCount} arquivo(s)
+                    </div>
+                  </div>
                   
                   {/* Dropzone */}
                   <div
                     className={cn(
-                      "w-full p-5 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center transition-colors cursor-pointer",
+                      "w-full min-h-[170px] p-5 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center transition-colors cursor-pointer",
                       dragActive ? "border-blue-400 bg-blue-500/10" : "border-white/20 bg-white/5 hover:bg-white/10"
                     )}
                     onDragEnter={handleDrag}
@@ -794,7 +1299,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
 
                   {/* URL input */}
                   <div className="flex flex-col gap-1.5">
-                    <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold flex items-center gap-1"><Link size={10} /> Ou cole uma URL (imagem · GIF · vídeo)</p>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold flex items-center gap-1"><Link size={10} /> Ou cole uma URL (imagem • GIF • vídeo)</p>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -853,7 +1358,10 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
                     </div>
                   )}
                   {(!details.images || details.images.length === 0) && (
-                    <p className="text-[11px] text-slate-600 text-center py-2">Nenhuma mídia adicionada ainda.</p>
+                    <div className="rounded-2xl border border-white/10 bg-black/10 px-4 py-6 text-center">
+                      <p className="text-sm text-slate-500">Nenhuma midia adicionada ainda.</p>
+                      <p className="text-xs text-slate-600 mt-1">Use imagens gerais para referencia visual do processo inteiro.</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -867,13 +1375,14 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details, onUpdate
             onClose={() => setIsCommentsOpen(false)}
             comments={comments}
             currentUser={currentUser || null}
-            onAddComment={addComment}
+            onAddComment={(text) => addComment(currentUser?.name || 'Usuário', currentUser?.email || '', text)}
             onResolveComment={resolveComment}
             onDeleteComment={deleteComment}
-            nodeName={nodeData?.label || 'Nó'}
+            nodeName={safeNodeData.label || 'Nó'}
           />
         </>
       )}
     </AnimatePresence>
+    </WritingSuggestionProvider>
   );
 }

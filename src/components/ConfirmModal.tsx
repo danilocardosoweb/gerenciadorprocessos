@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle, X, Check } from 'lucide-react';
+import { AlertTriangle, X, Check, Loader2, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface ConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title?: string;
   message: string;
   confirmText?: string;
@@ -24,6 +24,8 @@ export function ConfirmModal({
   cancelText = 'Cancelar',
   type = 'danger'
 }: ConfirmModalProps) {
+  const [isConfirming, setIsConfirming] = useState(false);
+
   if (!isOpen) return null;
 
   const typeConfig = {
@@ -55,6 +57,21 @@ export function ConfirmModal({
 
   const config = typeConfig[type];
   const Icon = config.icon;
+  const ConfirmIcon = type === 'danger' ? Trash2 : Check;
+
+  const handleConfirm = async () => {
+    if (isConfirming) return;
+
+    try {
+      setIsConfirming(true);
+      await onConfirm();
+      onClose();
+    } catch (error) {
+      console.error('Não foi possível concluir a confirmação:', error);
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -66,11 +83,16 @@ export function ConfirmModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={() => {
+              if (!isConfirming) onClose();
+            }}
           />
           
           {/* Modal */}
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-modal-title"
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -86,7 +108,7 @@ export function ConfirmModal({
               </div>
               
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-white mb-1">
+                <h3 id="confirm-modal-title" className="text-lg font-bold text-white mb-1">
                   {title}
                 </h3>
                 <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
@@ -96,7 +118,9 @@ export function ConfirmModal({
 
               <button
                 onClick={onClose}
+                disabled={isConfirming}
                 className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors shrink-0"
+                aria-label="Fechar confirmação"
               >
                 <X size={20} />
               </button>
@@ -106,25 +130,24 @@ export function ConfirmModal({
             <div className="flex items-center justify-end gap-3 px-6 py-4 bg-black/20 border-t border-white/5">
               <button
                 onClick={onClose}
-                className="px-4 py-2.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+                disabled={isConfirming}
+                className="px-4 py-2.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {cancelText}
               </button>
               
               <button
-                onClick={() => {
-                  onConfirm();
-                  onClose();
-                }}
+                onClick={handleConfirm}
+                disabled={isConfirming}
                 className={cn(
-                  'px-5 py-2.5 text-sm font-bold text-white rounded-xl transition-all shadow-lg flex items-center gap-2',
+                  'px-5 py-2.5 text-sm font-bold text-white rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait',
                   config.confirmBg,
                   config.confirmShadow,
                   'hover:shadow-xl active:scale-95'
                 )}
               >
-                <Check size={16} />
-                {confirmText}
+                {isConfirming ? <Loader2 size={16} className="animate-spin" /> : <ConfirmIcon size={16} />}
+                {isConfirming ? 'Processando...' : confirmText}
               </button>
             </div>
           </motion.div>

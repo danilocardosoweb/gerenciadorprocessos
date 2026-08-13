@@ -103,7 +103,7 @@ export function GlobalMetrics({ mappedProcessesCount, expiringDocsCount, ideasCo
           <button
             onClick={() => setShowKaizenHelp(!showKaizenHelp)}
             className="opacity-0 group-hover:opacity-100 transition-opacity text-purple-400 hover:text-purple-300"
-            title="O que é Kaizen?"
+            title="O que é Kaizen"
           >
             <HelpCircle size={16} />
           </button>
@@ -116,13 +116,13 @@ export function GlobalMetrics({ mappedProcessesCount, expiringDocsCount, ideasCo
             animate={{ opacity: 1, y: 0 }}
             className="absolute top-full left-0 right-0 mt-2 bg-[#1e293b] border border-purple-500/30 rounded-xl p-4 text-xs text-slate-300 z-20 shadow-xl"
           >
-            <p className="font-semibold text-purple-300 mb-2">💡 Como usar Ideias (Kaizen):</p>
+            <p className="font-semibold text-purple-300 mb-2">Como usar Ideias (Kaizen):</p>
             <ul className="space-y-1.5 text-slate-400">
-              <li>✓ Clique em <strong>"Nova Ideia"</strong> para criar uma sugestão de melhoria</li>
-              <li>✓ Escreva em <strong>Markdown</strong> (títulos, listas, links, etc)</li>
-              <li>✓ Descreva o problema e sua solução proposta</li>
-              <li>✓ Clique em <strong>"Editar"</strong> para modificar depois</li>
-              <li>✓ Compartilhe com a equipe para análise e implementação</li>
+              <li> Clique em <strong>"Nova Ideia"</strong> para criar uma sugestão de melhoria</li>
+              <li> Escreva em <strong>Markdown</strong> (títulos, listas, links, etc)</li>
+              <li> Descreva o problema e sua solução proposta</li>
+              <li> Clique em <strong>"Editar"</strong> para modificar depois</li>
+              <li> Compartilhe com a equipe para análise e implementao</li>
             </ul>
           </motion.div>
         )}

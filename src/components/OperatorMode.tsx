@@ -4,12 +4,20 @@ import { ArrowRight, CheckCircle2, Play, Maximize2, Home, ChevronLeft, ChevronRi
 import { Edge, Node } from '@xyflow/react';
 import { NodeDetails } from './NodeModal';
 import { ActionFlow } from './ActionFlow';
+import { normalizeOperationalMetadata, type OperationalModeName } from '../lib/operationalModel';
 
 interface OperatorModeProps {
   mapTitle: string;
   nodes: Node[];
   edges: Edge[];
   nodeDetailsMap: Record<string, NodeDetails>;
+  mode: OperationalModeName;
+  currentUserId: string;
+  assessmentRefreshToken: number;
+  assessments: any[];
+  assessmentLoading: boolean;
+  onStartAssessment: (assessment: any) => void;
+  onOpenAssessments: () => void;
 }
 
 type ChecklistCriticality = 'critical' | 'required' | 'info';
@@ -57,14 +65,29 @@ interface OperatorStep {
   rawChecklist: string[];
   image: string;
   images: string[];
+  hasVisualReference: boolean;
+  operational: ReturnType<typeof normalizeOperationalMetadata>;
   severity?: 'ok' | 'warning' | 'alert';
 }
 
 interface OperatorPhase {
   id: string;
   title: string;
-  description?: string;
+  description: string;
   steps: OperatorStep[];
+}
+
+type SummaryTone = 'blue' | 'emerald' | 'amber' | 'violet' | 'cyan' | 'rose';
+
+interface OperatorSummaryBadge {
+  label: string;
+  tone: SummaryTone;
+}
+
+interface OperatorSummaryCard {
+  title: string;
+  tone: SummaryTone;
+  items: string[];
 }
 
 const FALLBACK_IMAGES = [
@@ -84,7 +107,7 @@ const hashCode = (input: string) => {
   return Math.abs(hash);
 };
 
-const CRITICAL_KEYWORDS = ['conferir', 'verificar', 'checar', 'garantir', 'confirmar código', 'não ligar', 'perigo', 'crítico', 'obrigatório', 'nunca', 'sempre', 'segurança', 'emergência'];
+const CRITICAL_KEYWORDS = ['conferir', 'verificar', 'checar', 'garantir', 'confirmar código', 'no ligar', 'perigo', 'crítico', 'obrigatório', 'nunca', 'sempre', 'segurança', 'emergência'];
 const INFO_KEYWORDS = ['anotar', 'registrar', 'informar', 'observar', 'horário', 'comunicar', 'informativo'];
 
 const classifyItem = (text: string): ChecklistCriticality => {
@@ -113,7 +136,7 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
         alertLevel: "success"
       },
       ifNOK: {
-        result: "Sistema não aceita o código ou lote não existe",
+        result: "Sistema não aceita o código ou o lote não existe",
         action: "NÃO PROSSIGA - Chame o supervisor imediatamente",
         nextStep: "Verifique se o material está no estoque correto",
         alertLevel: "critical"
@@ -141,7 +164,7 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
         alertLevel: "success"
       },
       ifNOK: {
-        result: "Erro no vínculo ou lote MP não encontrado",
+        result: "Erro no vínculo ou lote de matéria-prima não encontrado",
         action: "PARE - Não libere o pallet",
         nextStep: "Verifique o lote de MP no sistema",
         alertLevel: "critical"
@@ -185,10 +208,10 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
   if (lower.includes('data') || lower.includes('turno')) {
     return {
       howTo: [
-        { order: 1, instruction: "Verifique o turno atual no relógio de ponto", visualHint: "1º Turno: 06-14h | 2º: 14-22h | 3º: 22-06h" },
+        { order: 1, instruction: "Verifique o turno atual no relógio de ponto", visualHint: "1º turno: 06-14h | 2º: 14-22h | 3º: 22-06h" },
         { order: 2, instruction: "Abra o registro de produção no sistema", visualHint: "Ícone 'Produção' no menu principal" },
         { order: 3, instruction: "Preencha data (automática), turno, e quantidade produzida", visualHint: "Data pega do sistema, preencha turno manualmente" },
-        { order: 4, instruction: "Salve e tire print da tela como evidência", visualHint: "Botão 'Salvar' deve ficar cinza (registro salvo)" }
+        { order: 4, instruction: "Salve e tire uma captura da tela como evidência", visualHint: "Botão 'Salvar' deve ficar cinza (registro salvo)" }
       ],
       ifOK: {
         result: "Produção registrada no turno correto",
@@ -214,9 +237,9 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
     return {
       howTo: [
         { order: 1, instruction: "Verifique se o pallet tem etiqueta IATF válida", visualHint: "Etiqueta azul com código de barras" },
-        { order: 2, instruction: "Confirma que lote MP e pedido cliente estão vinculados", visualHint: "Sistema mostra os 3 códigos ligados" },
+        { order: 2, instruction: "Confirme que o lote de matéria-prima e o pedido do cliente estão vinculados", visualHint: "O sistema mostra os três códigos relacionados" },
         { order: 3, instruction: "Salve o registro no sistema de arquivamento", visualHint: "Botão 'Arquivar para IATF'" },
-        { order: 4, instruction: "Confera se aparece na lista 'Documentos Arquivados'", visualHint: "Status 'Arquivado IATF'" }
+        { order: 4, instruction: "Confira se aparece na lista 'Documentos Arquivados'", visualHint: "Status 'Arquivado IATF'" }
       ],
       ifOK: {
         result: "Documentação arquivada conforme IATF 16949",
@@ -244,7 +267,7 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
         { order: 1, instruction: "Posicione a peça sobre superfície plana e limpa", visualHint: "Bancada de medição, sem sujeira" },
         { order: 2, instruction: "Limpe o paquímetro e zere antes de medir", visualHint: "Feche as hastes e aperte 'ZERO'" },
         { order: 3, instruction: "Meça em 3 pontos diferentes da peça", visualHint: "Extremidades e centro" },
-        { order: 4, instruction: "Compare com especificação ±0.5mm ou ±0.2mm", visualHint: "Ex: 100mm deve dar 99.5 a 100.5mm" }
+        { order: 4, instruction: "Compare com a especificação: ±0,5 mm ou ±0,2 mm", visualHint: "Ex.: 100 mm deve medir entre 99,5 e 100,5 mm" }
       ],
       ifOK: {
         result: "Todas as medidas dentro da tolerância",
@@ -259,8 +282,8 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
         alertLevel: "critical"
       },
       tips: [
-        { icon: "scan", message: "Temperatura ambiente afeta medição em ±0.1mm" },
-        { icon: "lightbulb", message: "Calibração do paquímetro anual obrigatória" }
+        { icon: "scan", message: "Temperatura ambiente afeta medição em 0.1mm" },
+        { icon: "lightbulb", message: "Calibração periódica do paquímetro é obrigatória" }
       ]
     };
   }
@@ -269,10 +292,10 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
   if (lower.includes('tolerância')) {
     return {
       howTo: [
-        { order: 1, instruction: "Verifique na OP qual tolerância aplicar", visualHint: "±0.5mm padrão | ±0.2mm precisão" },
+        { order: 1, instruction: "Verifique na OP qual tolerância aplicar", visualHint: "±0,5 mm padrão | ±0,2 mm precisão" },
         { order: 2, instruction: "Meça a peça na dimensão crítica", visualHint: "Use paquímetro calibrado" },
-        { order: 3, instruction: "Calcule: Medida - Especificação = Desvio", visualHint: "Ex: 100.3 - 100 = +0.3mm" },
-        { order: 4, instruction: "Se desvio ≤ tolerância: APROVADO | Senão: REPROVADO", visualHint: "±0.5mm aceita de -0.5 a +0.5mm" }
+        { order: 3, instruction: "Calcule: Medida - Especificação = Desvio", visualHint: "Ex.: 100,3 - 100 = +0,3 mm" },
+        { order: 4, instruction: "Se o desvio estiver dentro da tolerância: APROVADO. Senão: REPROVADO", visualHint: "±0,5 mm aceita de -0,5 a +0,5 mm" }
       ],
       ifOK: {
         result: "Peça dentro da tolerância especificada",
@@ -287,8 +310,8 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
         alertLevel: "critical"
       },
       tips: [
-        { icon: "scan", message: "Tolerância de ±0.2mm é para peças críticas" },
-        { icon: "alert", message: "Peça fora tolerância = cliente insatisfeito" }
+        { icon: "scan", message: "Tolerância de ±0,2 mm para peças críticas" },
+        { icon: "alert", message: "Peça fora da tolerância pode afetar o cliente" }
       ],
       files: [
         { name: "Ficha de Inspeção Dimensional.pdf", url: "/docs/ficha-inspecao.pdf", type: "pdf" },
@@ -309,7 +332,7 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
         { order: 1, instruction: "Posicione o perfil com código de barras visível", visualHint: "Etiqueta virada para cima, sem dobras" },
         { order: 2, instruction: "Aproxime o leitor 5-10cm do código", visualHint: "Laser vermelho deve cobrir o código" },
         { order: 3, instruction: "Acione o gatilho e aguarde o 'beep'", visualHint: "Som contínuo = OK | Intermitente = erro" },
-        { order: 4, instruction: "Confera na tela se código corresponde à OP", visualHint: "Código exibido em verde = compatível" }
+        { order: 4, instruction: "Confira na tela se o código corresponde à OP", visualHint: "Código exibido em verde = compatível" }
       ],
       ifOK: {
         result: "Código lido corretamente e compatível",
@@ -319,13 +342,13 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
       },
       ifNOK: {
         result: "Código ilegível ou INCOMPATÍVEL com OP",
-        action: "ISOLAR material - não inicie corte",
+        action: "ISOLAR material - não inicie o corte",
         nextStep: "Chame supervisor ou logística",
         alertLevel: "critical"
       },
       tips: [
         { icon: "scan", message: "Limpe o código se estiver sujo" },
-        { icon: "lightbulb", message: "Boa iluminação facilita leitura" }
+        { icon: "lightbulb", message: "Boa iluminação facilita a leitura" }
       ]
     };
   }
@@ -334,10 +357,59 @@ const generateItemGuide = (text: string): Partial<ChecklistItem> => {
   return {};
 };
 
-const buildChecklist = (details?: NodeDetails, fallbackLabel?: string): ChecklistItem[] => {
-  let texts: string[] = [];
+const buildChecklist = (
+  details: NodeDetails,
+  fallbackLabel: string,
+  operational: ReturnType<typeof normalizeOperationalMetadata>,
+): ChecklistItem[] => {
+  const buildTaskItem = (task: NonNullable<NodeDetails['tasks']>[number]): ChecklistItem | null => {
+    const text = typeof task?.text === 'string' ? task.text.trim() : '';
+    if (!text) return null;
+
+    const suggestedGuide = generateItemGuide(text);
+    const taskHowTo = Array.isArray(task.howTo) ? task.howTo.filter(Boolean) : [];
+    const taskTips = Array.isArray(task.tips) ? task.tips.filter(Boolean) : [];
+    const taskFiles = Array.isArray(task.files) ? task.files.filter(Boolean) : [];
+    const taskImages = Array.isArray(task.images) ? task.images.filter(Boolean) : [];
+
+    return {
+      text,
+      criticality: classifyItem(text),
+      ...suggestedGuide,
+      ...(taskHowTo.length > 0 ? { howTo: taskHowTo } : {}),
+      ...(task.ifOK ? { ifOK: task.ifOK } : {}),
+      ...(task.ifNOK ? { ifNOK: task.ifNOK } : {}),
+      ...(taskTips.length > 0 ? { tips: taskTips } : {}),
+      ...(taskFiles.length > 0 ? { files: taskFiles } : {}),
+      ...(taskImages.length > 0 ? { images: taskImages } : {}),
+    };
+  };
+
   if (details?.tasks?.length) {
-    texts = details.tasks.slice(0, 6).map(task => task.text.trim()).filter(Boolean);
+    const taskItems = details.tasks.slice(0, 6).map(buildTaskItem).filter(Boolean) as ChecklistItem[];
+    if (taskItems.length > 0) {
+      const firstItem = taskItems[0];
+      if ((!firstItem.howTo || firstItem.howTo.length === 0) && Array.isArray(details.howTo) && details.howTo.length > 0) {
+        firstItem.howTo = details.howTo;
+      }
+      if (!firstItem.ifOK && details.ifOK) firstItem.ifOK = details.ifOK;
+      if (!firstItem.ifNOK && details.ifNOK) firstItem.ifNOK = details.ifNOK;
+      if ((!firstItem.tips || firstItem.tips.length === 0) && Array.isArray(details.tips) && details.tips.length > 0) {
+        firstItem.tips = details.tips;
+      }
+      return taskItems;
+    }
+  }
+
+  let texts: string[] = [];
+  if (operational) {
+    texts = uniqueItems([
+      ...operational.approvalCriteria.map((item) => `Conferir: ${item}`),
+      operational.inspectionFrequency ? `Realizar inspeção: ${operational.inspectionFrequency}` : undefined,
+      operational.specialCharacteristic ? `Verificar ponto crítico: ${operational.specialCharacteristic}` : undefined,
+      ...operational.requiredRecords.map((item) => `Registrar: ${item}`),
+      operational.traceability ? `Garantir rastreabilidade: ${operational.traceability}` : undefined,
+    ], 6);
   } else if (details?.description) {
     texts = details.description
       .split(/\.|\n|;/)
@@ -365,6 +437,10 @@ const pickImage = (details?: NodeDetails, seed = '0') => {
   return `${FALLBACK_IMAGES[hashCode(seed) % FALLBACK_IMAGES.length]}&sat=${(hashCode(seed) % 40) + 60}`;
 };
 
+const hasVisualReference = (details?: NodeDetails) => (
+  Array.isArray(details?.images) && details.images.some((image) => typeof image === 'string' && image.trim().length > 0)
+);
+
 const pickImages = (details?: NodeDetails, seed = '0'): string[] => {
   if (details?.images?.length) return details.images.slice(0, 6);
   return [`${FALLBACK_IMAGES[hashCode(seed) % FALLBACK_IMAGES.length]}&sat=${(hashCode(seed) % 40) + 60}`];
@@ -374,18 +450,18 @@ const pickImages = (details?: NodeDetails, seed = '0'): string[] => {
 const FileAttachments = ({ files }: { files: AttachedFile[] }) => {
   const getFileIcon = (type: string) => {
     switch (type) {
-      case 'pdf': return '📄';
-      case 'doc': return '📝';
-      case 'xls': return '📊';
-      case 'image': return '🖼️';
-      default: return '📎';
+      case 'pdf': return 'PDF';
+      case 'doc': return 'DOC';
+      case 'xls': return 'XLS';
+      case 'image': return 'IMG';
+      default: return 'ARQ';
     }
   };
 
   return (
     <div className="mt-4 p-3 bg-white/5 rounded-xl border border-white/10">
       <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-        📎 Arquivos para Consulta
+        Arquivos para consulta
       </h4>
       <div className="space-y-2">
         {files.map((file, idx) => (
@@ -423,7 +499,7 @@ const ImageCarousel = ({ images }: { images: string[] }) => {
   return (
     <div className="mt-4">
       <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-        🖼️ Imagens de Referência
+        Imagens de referência
       </h4>
       <div className="relative bg-black/30 rounded-xl overflow-hidden border border-white/10">
         {/* Main Image */}
@@ -484,12 +560,159 @@ const ImageCarousel = ({ images }: { images: string[] }) => {
 };
 
 const CRITICALITY_CONFIG: Record<ChecklistCriticality, { icon: string; label: string; bar: string; bg: string; border: string; text: string; glow: string }> = {
-  critical: { icon: '🔴', label: 'CRÍTICO',     bar: 'bg-red-500',    bg: 'bg-red-500/10',    border: 'border-red-500/40',    text: 'text-red-300',    glow: '0 0 18px rgba(239,68,68,0.35)' },
-  required: { icon: '🟡', label: 'OBRIGATÓRIO', bar: 'bg-amber-400',  bg: 'bg-amber-400/8',   border: 'border-amber-400/30',  text: 'text-amber-300',  glow: '0 0 18px rgba(251,191,36,0.3)' },
-  info:     { icon: '🔵', label: 'INFORMATIVO',  bar: 'bg-blue-400',   bg: 'bg-blue-400/8',    border: 'border-blue-400/30',   text: 'text-blue-300',   glow: '0 0 18px rgba(96,165,250,0.25)' },
+  critical: { icon: '=4', label: 'CRÍTICO',     bar: 'bg-red-500',    bg: 'bg-red-500/10',    border: 'border-red-500/40',    text: 'text-red-300',    glow: '0 0 18px rgba(239,68,68,0.35)' },
+  required: { icon: '!', label: 'OBRIGATÓRIO', bar: 'bg-amber-400',  bg: 'bg-amber-400/8',   border: 'border-amber-400/30',  text: 'text-amber-300',  glow: '0 0 18px rgba(251,191,36,0.3)' },
+  info:     { icon: '=5', label: 'INFORMATIVO',  bar: 'bg-blue-400',   bg: 'bg-blue-400/8',    border: 'border-blue-400/30',   text: 'text-blue-300',   glow: '0 0 18px rgba(96,165,250,0.25)' },
 };
 
-export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: OperatorModeProps) {
+const OPERATOR_STEP_TYPE_LABELS: Record<string, string> = {
+  process: 'Visão geral do processo',
+  operation: 'Execução da operação',
+  inspection: 'Conferência e inspeção',
+  decision: 'Ponto de decisão',
+  alert: 'Alerta operacional',
+  risk: 'Ponto de risco',
+  safety: 'Segurança obrigatória',
+  ctq: 'Ponto crítico de qualidade',
+  error: 'Tratativa de erro',
+  deviation: 'Tratativa de desvio',
+  corrective_action: 'Ação corretiva',
+  root_cause: 'Causa provável',
+  troubleshooting: 'Suporte rápido',
+  record: 'Registro obrigatório',
+  evidence: 'Evidência obrigatória',
+  client: 'Requisito do cliente',
+  audit: 'Ponto auditável',
+  critical_point: 'Ponto crítico',
+  nok: 'Fluxo de não conformidade',
+  ok: 'Fluxo aprovado',
+  block: 'Bloqueio operacional',
+  release: 'Liberação',
+};
+
+const SUMMARY_TONE_STYLES: Record<SummaryTone, { badge: string; card: string; title: string; bullet: string }> = {
+  blue: {
+    badge: 'bg-blue-500/15 border border-blue-500/30 text-blue-300',
+    card: 'border-blue-500/15 bg-blue-500/[0.06]',
+    title: 'text-blue-300',
+    bullet: 'bg-blue-400',
+  },
+  emerald: {
+    badge: 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300',
+    card: 'border-emerald-500/15 bg-emerald-500/[0.06]',
+    title: 'text-emerald-300',
+    bullet: 'bg-emerald-400',
+  },
+  amber: {
+    badge: 'bg-amber-500/15 border border-amber-500/30 text-amber-300',
+    card: 'border-amber-500/15 bg-amber-500/[0.06]',
+    title: 'text-amber-300',
+    bullet: 'bg-amber-400',
+  },
+  violet: {
+    badge: 'bg-violet-500/15 border border-violet-500/30 text-violet-300',
+    card: 'border-violet-500/15 bg-violet-500/[0.06]',
+    title: 'text-violet-300',
+    bullet: 'bg-violet-400',
+  },
+  cyan: {
+    badge: 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-300',
+    card: 'border-cyan-500/15 bg-cyan-500/[0.06]',
+    title: 'text-cyan-300',
+    bullet: 'bg-cyan-400',
+  },
+  rose: {
+    badge: 'bg-rose-500/15 border border-rose-500/30 text-rose-300',
+    card: 'border-rose-500/15 bg-rose-500/[0.06]',
+    title: 'text-rose-300',
+    bullet: 'bg-rose-400',
+  },
+};
+
+const uniqueItems = (items: Array<string | undefined | null>, limit = 4) => {
+  const normalized = items
+    .flatMap((item) => (item ? [item] : []))
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return Array.from(new Set(normalized)).slice(0, limit);
+};
+
+const getLocalRiskWeight = (value: string) => ({ none: 0, low: 1, medium: 2, high: 3, critical: 4 }[value] || 0);
+
+const buildOperatorSummary = (step: OperatorStep, mode: OperationalModeName) => {
+  const op = step.operational;
+  const isHighRisk = getLocalRiskWeight(op.riskLevel) >= 3 || op.nodeTypeAdvanced === 'block' || op.nodeTypeAdvanced === 'safety';
+  const typeLabel = OPERATOR_STEP_TYPE_LABELS[op.nodeTypeAdvanced] || 'Etapa operacional';
+  const badges: OperatorSummaryBadge[] = [];
+  const cards: OperatorSummaryCard[] = [];
+
+  if (op.ctq || op.specialCharacteristic) {
+    badges.push({ label: 'Conferência importante', tone: 'violet' });
+  }
+  if (op.requiresEvidence || op.requiredRecords.length > 0) {
+    badges.push({ label: 'Registro obrigatório', tone: 'blue' });
+  }
+  if (op.requiresApproval) {
+    badges.push({ label: 'Liberação necessria', tone: 'emerald' });
+  }
+  if (isHighRisk) {
+    badges.push({ label: 'Pare se houver desvio', tone: 'amber' });
+  }
+  if (mode !== 'operator' && op.auditRequired) {
+    badges.push({ label: 'Ponto auditável', tone: 'cyan' });
+  }
+
+  const validateItems = uniqueItems([
+    ...op.approvalCriteria,
+    op.inspectionFrequency ? `Conferir: ${op.inspectionFrequency}` : undefined,
+    op.specialCharacteristic ? `Verificar: ${op.specialCharacteristic}` : undefined,
+  ]);
+
+  if (validateItems.length > 0) {
+    cards.push({ title: 'Como saber se está certo', tone: 'emerald', items: validateItems });
+  }
+
+  const problemItems = uniqueItems([
+    ...op.nokFlow,
+    ...op.reactionPlan.actions,
+    ...op.troubleshooting.immediateActions,
+    ...op.reactionPlan.stopProductionCriteria.map((item) => `Pare quando: ${item}`),
+    ...op.troubleshooting.whoToCall.map((item) => `Acionar: ${item}`),
+  ], 5);
+
+  if (problemItems.length > 0) {
+    cards.push({ title: 'Se der problema', tone: isHighRisk ? 'rose' : 'amber', items: problemItems });
+  }
+
+  const registerItems = uniqueItems([
+    ...op.requiredRecords,
+    ...op.evidenceExamples,
+    (op.traceability && (op.requiresEvidence || op.requiredRecords.length > 0 || op.requiresApproval)) ?
+       `Rastrear por: ${op.traceability}`
+      : undefined,
+  ]);
+
+  if (registerItems.length > 0) {
+    cards.push({ title: 'O que registrar', tone: 'blue', items: registerItems });
+  }
+
+  if (mode === 'training' || mode === 'troubleshooting') {
+    const learningItems = uniqueItems([
+      ...op.troubleshooting.commonFailures.map((item) => `Falha comum: ${item}`),
+      ...op.troubleshooting.probableCauses.map((item) => `Causa provável: ${item}`),
+      ...op.lessonsLearned,
+      op.customer ? `Impacto no cliente: ${op.customer}` : undefined,
+    ], 5);
+
+    if (learningItems.length > 0) {
+      cards.push({ title: mode === 'training' ? 'O que merece atenção' : 'Falhas e causas comuns', tone: 'amber', items: learningItems });
+    }
+  }
+
+  return { typeLabel, badges, cards };
+};
+
+export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'operator' }: OperatorModeProps) {
   const [view, setView] = useState<'home' | 'wizard' | 'complete'>('home');
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
@@ -528,16 +751,24 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
     const createStep = (node: Node): OperatorStep => {
       const data = (node.data || {}) as any;
       const details = nodeDetailsMap[node.id];
-      const checklist = buildChecklist(details, data.label);
+      const operational = normalizeOperationalMetadata(details.operational, data);
+      const checklist = buildChecklist(details, data.label, operational);
       return {
         id: node.id,
         title: data.label || 'Etapa',
-        description: details?.description || data.description || 'Siga as instruções apresentadas nesta etapa.',
+        description: details.description || data.description || 'Siga as instruções apresentadas nesta etapa.',
         checklist,
         rawChecklist: checklist.map(c => c.text),
         image: pickImage(details, node.id),
         images: pickImages(details, node.id),
-        severity: data.nodeType === 'decision' ? 'warning' : data.nodeType === 'alert' ? 'alert' : 'ok',
+        hasVisualReference: hasVisualReference(details),
+        operational,
+        severity:
+          operational.riskLevel === 'high' || operational.riskLevel === 'critical' || operational.nodeTypeAdvanced === 'block' ?
+             'alert'
+            : operational.ctq || operational.auditRequired || operational.nodeTypeAdvanced === 'inspection' || operational.nodeTypeAdvanced === 'decision' ?
+               'warning'
+              : 'ok',
       };
     };
 
@@ -573,14 +804,24 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
   const totalSteps = phases.reduce((sum, phase) => sum + phase.steps.length, 0);
   const completedSteps = phases.slice(0, phaseIndex).reduce((sum, phase) => sum + phase.steps.length, 0) + stepIndex;
   const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+  const operatorSummary = useMemo(
+    () => (currentStep ? buildOperatorSummary(currentStep, mode) : null),
+    [currentStep, mode],
+  );
 
   useEffect(() => {
     setCheckState({});
-    setExpandedItem(null);
+    const firstGuidedItem = currentStep?.checklist.find((item) => (
+      (Array.isArray(item.howTo) && item.howTo.length > 0)
+      || Boolean(item.ifOK)
+      || Boolean(item.ifNOK)
+    ));
+    setExpandedItem(firstGuidedItem?.text || null);
+    setIsImageCollapsed(!currentStep?.hasVisualReference);
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
     setActiveImageIdx(0);
-  }, [phaseIndex, stepIndex]);
+  }, [phaseIndex, stepIndex, currentStep]);
 
   const handleStart = (index = 0) => {
     setPhaseIndex(index);
@@ -649,14 +890,6 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
       setView('home');
     }
   }, [stepIndex, phaseIndex, phases]);
-
-  if (!phases.length) {
-    return (
-      <div className="w-full h-full flex items-center justify-center text-slate-300 bg-[#050a14]">
-        Nenhum fluxo definido para exibição no modo operador.
-      </div>
-    );
-  }
 
   // Fullscreen API
   const enterFullscreen = useCallback(() => {
@@ -728,10 +961,18 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
     return () => window.removeEventListener('keydown', onKey);
   }, [view, canAdvance, handleNext, handleBack, searchOpen]);
 
+  if (!phases.length) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-slate-300 bg-[#050a14]">
+        Nenhum fluxo definido para exibição no modo operador.
+      </div>
+    );
+  }
+
   return (
     <div className="absolute inset-0 bg-[#060d1a] text-white flex flex-col">
 
-      {/* ══════════════ HOME SCREEN ══════════════ */}
+      {/* PPPPPPPPPPPPPP HOME SCREEN PPPPPPPPPPPPPP */}
       <AnimatePresence mode="wait">
         {view === 'home' && (
           <motion.div
@@ -749,7 +990,9 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
 
             {/* hero */}
             <div className="relative flex flex-col items-center justify-center min-h-full px-6 sm:px-8 text-center py-10">
-              <p className="text-[10px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-2">Modo Operador · Execução Guiada</p>
+              <p className="text-[10px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-2">
+                {mode === 'training' ? 'Modo Treinamento · Aprendizado Guiado' : 'Modo Operador · Execução Guiada'}
+              </p>
               <h1 
                 className="font-black text-white leading-tight max-w-4xl"
                 style={{
@@ -763,7 +1006,9 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                 className="text-slate-400 mt-2 max-w-xl"
                 style={{ fontSize: 'clamp(0.875rem, 2vw, 1.125rem)' }}
               >
-                Siga as instruções passo a passo. Cada tela mostra apenas o que você precisa fazer agora.
+                {mode === 'training' ?
+                   'Aprenda o processo com explicações simples, pontos de atenção e reação aos desvios.'
+                  : 'Veja somente o essencial da etapa atual: o que fazer, como conferir e como reagir se algo sair do padrão.'}
               </p>
 
               <div className="mt-10 flex flex-wrap gap-4 justify-center">
@@ -771,7 +1016,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                   onClick={() => { handleStart(0); enterFullscreen(); }}
                   className="flex items-center gap-2 bg-emerald-500 text-slate-900 font-bold text-base px-6 py-3 rounded-xl shadow-[0_12px_30px_rgba(16,185,129,0.3)] hover:bg-emerald-400 active:scale-95 transition-all"
                 >
-                  <Play size={18} fill="currentColor" /> Iniciar
+                  <Play size={18} fill="currentColor" /> Começar
                 </button>
                 <button
                   onClick={() => setSearchOpen(true)}
@@ -813,7 +1058,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
           </motion.div>
         )}
 
-        {/* ══════════════ WIZARD — FULLSCREEN SLIDE ══════════════ */}
+        {/* PPPPPPPPPPPPPP WIZARD  FULLSCREEN SLIDE PPPPPPPPPPPPPP */}
         {view === 'wizard' && currentPhase && currentStep && (
           <motion.div
             key={`slide-${phaseIndex}-${stepIndex}`}
@@ -823,8 +1068,8 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
             transition={{ duration: 0.3, ease: 'easeOut' }}
             className="absolute inset-0 flex flex-col"
           >
-            {/* ── HEADER BAR ── */}
-            <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-[#060d1a]/95 border-b border-white/5 z-10">
+            {/*  HEADER BAR  */}
+            <div className="shrink-0 flex min-w-0 items-center gap-2 overflow-x-auto px-3 py-2 bg-[#060d1a]/95 border-b border-white/5 z-10 sm:px-4">
               <button
                 onClick={() => setView('home')}
                 className="flex items-center gap-1 text-slate-400 hover:text-white text-xs font-medium transition-colors"
@@ -832,10 +1077,9 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                 <Home size={13} /> Início
               </button>
               <div className="w-px h-3 bg-white/10" />
-              <span className="text-[10px] text-blue-300 font-bold uppercase tracking-widest truncate">
-                Fase {phaseIndex + 1} — {currentPhase.title}
+              <span className="min-w-[150px] flex-1 truncate text-[10px] text-blue-300 font-bold uppercase tracking-widest">
+                Fase {phaseIndex + 1}  {currentPhase.title}
               </span>
-              <div className="flex-1" />
               <button
                 onClick={() => setSearchOpen(true)}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 text-xs transition-colors"
@@ -850,7 +1094,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
               </span>
 
               {/* Expand image button - discreet when collapsed */}
-              {isImageCollapsed && (
+              {isImageCollapsed && currentStep.hasVisualReference && (
                 <button
                   onClick={() => setIsImageCollapsed(false)}
                   className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all border border-transparent hover:border-blue-500/20"
@@ -863,7 +1107,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
               )}
             </div>
 
-            {/* ── PROGRESS BAR ── */}
+            {/*  PROGRESS BAR  */}
             <div className="shrink-0 h-1.5 bg-slate-800/60">
               <motion.div
                 className="h-full bg-gradient-to-r from-blue-500 via-emerald-400 to-amber-300"
@@ -873,13 +1117,13 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
               />
             </div>
 
-            {/* ── MAIN SLIDE CONTENT ── */}
-            <div className={`flex-1 min-h-0 ${isImageCollapsed ? 'block overflow-y-auto' : 'grid lg:grid-cols-2 overflow-y-auto lg:overflow-hidden'}`}>
+            {/*  MAIN SLIDE CONTENT  */}
+            <div className={`flex-1 min-h-0 ${isImageCollapsed ? 'block overflow-y-auto' : 'grid xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] overflow-y-auto xl:overflow-hidden'}`}>
 
               {/* LEFT PANEL: info + checklist */}
-              <div className={`flex flex-col gap-0 min-h-0 ${isImageCollapsed ? '' : 'border-r border-white/5'}`}>
+              <div className={`flex flex-col gap-0 min-h-0 ${isImageCollapsed ? '' : 'xl:border-r xl:border-white/5'}`}>
                 {/* title zone */}
-                <div className="shrink-0 px-6 pt-5 pb-3 border-b border-white/5">
+                <div className="shrink-0 px-4 pt-4 pb-3 border-b border-white/5 sm:px-6 sm:pt-5">
                   <p className="text-[9px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-1">Etapa</p>
                   <h2 
                     className="font-black text-white leading-tight"
@@ -905,14 +1149,55 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                       }}
                     >{currentStep.description}</p>
                   )}
+
+                  {operatorSummary && (
+                    <>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/5 border border-white/10 text-slate-200">
+                          {operatorSummary.typeLabel}
+                        </span>
+                        {operatorSummary.badges.map((badge) => (
+                          <span
+                            key={badge.label}
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${SUMMARY_TONE_STYLES[badge.tone].badge}`}
+                          >
+                            {badge.label}
+                          </span>
+                        ))}
+                      </div>
+
+                      {operatorSummary.cards.length > 0 && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+                          {operatorSummary.cards.map((card) => (
+                            <div
+                              key={card.title}
+                              className={`rounded-2xl border px-4 py-3 ${SUMMARY_TONE_STYLES[card.tone].card}`}
+                            >
+                              <p className={`text-[10px] uppercase tracking-[0.25em] font-bold ${SUMMARY_TONE_STYLES[card.tone].title}`}>
+                                {card.title}
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                {card.items.map((item) => (
+                                  <div key={item} className="flex items-start gap-2">
+                                    <span className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${SUMMARY_TONE_STYLES[card.tone].bullet}`} />
+                                    <p className="text-xs text-slate-200 leading-relaxed">{item}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
-                {/* checklist — scrollable only if too many items */}
-                <div className="flex-1 overflow-y-auto px-5 py-3">
+                {/* checklist  scrollable only if too many items */}
+                <div className="flex-1 min-h-[220px] overflow-y-auto px-3 py-3 sm:px-5">
                   {/* criticality legend */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <p className="text-[8px] text-slate-500 uppercase tracking-widest font-bold">☑ Confirme cada item:</p>
-                    <div className="flex items-center gap-2 ml-auto">
+                  <div className="flex flex-wrap items-center gap-2 mb-3 sm:gap-3">
+                    <p className="text-[8px] text-slate-500 uppercase tracking-widest font-bold"> Faça e marque o que já foi concluído:</p>
+                    <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
                       {(['critical','required','info'] as ChecklistCriticality[]).map(c => (
                         <span key={c} className={`text-[9px] font-bold flex items-center gap-0.5 ${CRITICALITY_CONFIG[c].text}`}>
                           {CRITICALITY_CONFIG[c].icon} {CRITICALITY_CONFIG[c].label}
@@ -925,7 +1210,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                       const checked = checkState[item.text];
                       const cfg = CRITICALITY_CONFIG[item.criticality];
                       const isExpanded = expandedItem === item.text;
-                      const hasGuide = item.howTo || item.ifOK || item.ifNOK;
+                      const hasGuide = (Array.isArray(item.howTo) && item.howTo.length > 0) || Boolean(item.ifOK) || Boolean(item.ifNOK);
                       
                       return (
                         <motion.div
@@ -989,7 +1274,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.5 }}
                                     className="shrink-0 text-[9px] font-black text-emerald-400 bg-emerald-400/15 border border-emerald-400/30 px-2 py-0.5 rounded-full"
-                                  >✓ OK</motion.span>
+                                  > OK</motion.span>
                                 )}
                               </AnimatePresence>
                             </div>
@@ -1006,7 +1291,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                               }`}
                             >
                               <Workflow size={12} />
-                              <span>{isExpanded ? 'Ocultar Guia' : 'Ver Guia de Execução'}</span>
+                              <span>{isExpanded ? 'Recolher Guia de Execução' : 'Abrir Guia de Execução'}</span>
                               <motion.div
                                 animate={{ rotate: isExpanded ? 180 : 0 }}
                                 transition={{ duration: 0.2 }}
@@ -1075,7 +1360,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                           <CheckCircle2 size={22} className="text-emerald-400 shrink-0" />
                         </motion.div>
                         <div>
-                          <p className="text-xs font-black text-emerald-300">✅ Etapa concluída com sucesso</p>
+                          <p className="text-xs font-black text-emerald-300"> Etapa concluída com sucesso</p>
                           <p className="text-[10px] text-emerald-400/70">Todos os itens foram confirmados. Avance para continuar.</p>
                         </div>
                       </motion.div>
@@ -1083,12 +1368,12 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                   </AnimatePresence>
                 </div>
 
-                {/* action bar — always at bottom */}
-                <div className="shrink-0 px-5 py-3 border-t border-white/5 bg-[#060d1a]/90">
+                {/* action bar  always at bottom */}
+                <div className="sticky bottom-0 z-20 shrink-0 px-3 py-3 border-t border-white/5 bg-[#060d1a]/95 backdrop-blur-xl sm:px-5">
                   <div className="flex gap-2 items-stretch">
                     <button
                       onClick={handleBack}
-                      className="flex items-center gap-1 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors"
+                      className="flex items-center gap-1 px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors sm:px-4"
                     >
                       <ChevronLeft size={16} /> Voltar
                     </button>
@@ -1108,14 +1393,14 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                             className="w-full h-full flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/5 cursor-not-allowed"
                           >
                             <span className="text-[10px] font-semibold text-amber-400 flex items-center gap-1">
-                              ⚠ Complete os itens obrigatórios
+                              Complete os itens obrigatórios
                             </span>
                             <span className="text-slate-600 font-bold text-sm">
-                              Marque os itens para continuar
+                              Marque o que foi feito para continuar
                             </span>
                           </motion.button>
                         ) : (
-                          /* UNLOCKED STATE — animated, pulsing, inviting */
+                          /* UNLOCKED STATE  animated, pulsing, inviting */
                           <motion.button
                             key="unlocked"
                             initial={{ opacity: 0, scale: 0.95 }}
@@ -1142,11 +1427,11 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                               <ArrowRight size={17} strokeWidth={3} />
                             </motion.span>
                             <span className="relative z-10">
-                              {phaseIndex < phases.length - 1 && stepIndex === currentPhase.steps.length - 1
-                                ? '▶ Próxima Fase'
-                                : stepIndex < currentPhase.steps.length - 1
-                                ? '▶ Próxima Etapa'
-                                : '✓ Concluir Processo'}
+                              {phaseIndex < phases.length - 1 && stepIndex === currentPhase.steps.length - 1 ?
+                                 '→ Próxima fase'
+                                : stepIndex < currentPhase.steps.length - 1 ?
+                                 '→ Próxima etapa'
+                                : ' Concluir leitura'}
                             </span>
                           </motion.button>
                         )}
@@ -1165,10 +1450,10 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: 100, opacity: 0 }}
                     transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                    className="relative flex flex-col min-h-[280px] lg:min-h-0 bg-[#040910]"
+                    className="relative flex min-h-[320px] flex-col bg-[#040910] xl:min-h-0"
                   >
 
-                {/* ── Top toolbar ── */}
+                {/*  Top toolbar  */}
                 <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-white/5 bg-[#060d1a]/80 z-20">
                   <span className="text-[9px] uppercase tracking-widest text-amber-300 font-black mr-1">Referência Visual</span>
                   
@@ -1212,7 +1497,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                   )}
                 </div>
 
-                {/* ── Image/Video viewer ── */}
+                {/*  Image/Video viewer  */}
                 {refMode === 'image' && (
                   <div
                     ref={imgRef}
@@ -1271,11 +1556,11 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                       </div>
                     )}
 
-                    {/* status badges — top-right inside viewer */}
+                    {/* status badges  top-right inside viewer */}
                     <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
-                      <span className="flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-full backdrop-blur-sm">🟩 OK</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold bg-red-500/20 border border-red-500/40 text-red-300 px-2 py-1 rounded-full backdrop-blur-sm">🟥 NOK</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-full backdrop-blur-sm">🟨 Atenção</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-full backdrop-blur-sm">✓ OK</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-red-500/20 border border-red-500/40 text-red-300 px-2 py-1 rounded-full backdrop-blur-sm">× NOK</span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-full backdrop-blur-sm"> Ateno</span>
                     </div>
 
                     {/* image thumbnails strip (if multiple) */}
@@ -1297,7 +1582,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                   </div>
                 )}
 
-                {/* ── Compare mode ── */}
+                {/*  Compare mode  */}
                 {refMode === 'compare' && (
                   <div className="flex-1 flex min-h-0 relative">
                     {/* LEFT: padrão esperado */}
@@ -1312,11 +1597,11 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#040910]/30" />
                       {/* header label */}
                       <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2 py-1 rounded-lg backdrop-blur-sm">✅ Padrão</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2 py-1 rounded-lg backdrop-blur-sm"> Padro</span>
                       </div>
                       {/* bottom info */}
                       <div className="absolute bottom-3 left-3 right-3">
-                        <p className="text-[10px] font-bold text-emerald-300 mb-0.5">Padrão Esperado</p>
+                        <p className="text-[10px] font-bold text-emerald-300 mb-0.5">Padro Esperado</p>
                         <p className="text-xs text-slate-300 leading-snug">{currentStep.title}</p>
                       </div>
                     </div>
@@ -1334,13 +1619,13 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                         <>
                           <img
                             src={currentStep.images[1]}
-                            alt="Comparação"
+                            alt="Comparao"
                             className="absolute inset-0 w-full h-full object-cover"
                             onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-[#040910]/90 via-transparent to-transparent" />
                           <div className="absolute top-2 left-2">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-blue-300 bg-blue-500/20 border border-blue-500/40 px-2 py-1 rounded-lg backdrop-blur-sm">🔍 Referência</span>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-blue-300 bg-blue-500/20 border border-blue-500/40 px-2 py-1 rounded-lg backdrop-blur-sm">= Referência</span>
                           </div>
                           <div className="absolute bottom-3 left-3 right-3">
                             <p className="text-[10px] font-bold text-blue-300 mb-0.5">Imagem de Referência</p>
@@ -1357,7 +1642,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                             <p className="text-[11px] text-slate-600 mt-1">Adicione no editor do nó</p>
                           </div>
                           <div className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-                            <span className="text-[10px] text-slate-500">💡 Arraste uma imagem para o NodeModal</span>
+                            <span className="text-[10px] text-slate-500">Arraste uma imagem para o editor do nó</span>
                           </div>
                         </div>
                       )}
@@ -1366,7 +1651,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
                 )}
 
 
-                {/* ── Bottom info (only image mode) ── */}
+                {/*  Bottom info (only image mode)  */}
                 {refMode === 'image' && (
                   <div className="shrink-0 px-4 py-2 border-t border-white/5 bg-[#060d1a]/90 z-10">
                     <p className="text-[8px] tracking-[0.3em] uppercase text-amber-300 font-bold mb-0.5">Referência</p>
@@ -1394,7 +1679,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
       </motion.div>
     )}
 
-        {/* ══════════════ COMPLETE SCREEN ══════════════ */}
+        {/* PPPPPPPPPPPPPP COMPLETE SCREEN PPPPPPPPPPPPPP */}
         {view === 'complete' && (
           <motion.div
             key="complete"
@@ -1415,10 +1700,10 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
               <CheckCircle2 size={60} className="text-emerald-400" />
             </motion.div>
             <div className="relative">
-              <p className="text-sm uppercase tracking-[0.5em] text-emerald-300 font-bold">Processo Concluído</p>
+              <p className="text-sm uppercase tracking-[0.5em] text-emerald-300 font-bold">Leitura Concluída</p>
               <h3 className="text-5xl font-black mt-3 text-white">Excelente!</h3>
               <p className="text-xl text-slate-300 mt-3 max-w-lg">
-                Todas as etapas de <strong className="text-white">{mapTitle}</strong> foram confirmadas com sucesso.
+                Você concluiu as etapas guiadas de <strong className="text-white">{mapTitle}</strong> com sucesso.
               </p>
             </div>
             <div className="relative flex flex-wrap gap-4 justify-center mt-2">
@@ -1438,7 +1723,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap }: Operato
           </motion.div>
         )}
       </AnimatePresence>
-      {/* ══════════════ SEARCH MODAL ══════════════ */}
+      {/* PPPPPPPPPPPPPP SEARCH MODAL PPPPPPPPPPPPPP */}
       <AnimatePresence>
         {searchOpen && (
           <motion.div

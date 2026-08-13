@@ -33,7 +33,7 @@ export function useComments(nodeId?: string) {
       .select('*')
       .order('created_at', { ascending: true })
       .then(({ data, error }) => {
-        if (error) console.error('❌ Error fetching comments:', error);
+        if (error) console.error('L Error fetching comments:', error);
         if (data) setComments(data.map(toComment));
         setIsLoaded(true);
       });

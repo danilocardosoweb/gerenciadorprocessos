@@ -1,5 +1,5 @@
-import React from 'react';
-import { Sun, Moon, Monitor } from 'lucide-react';
+﻿import React from 'react';
+import { Sun, Moon, Monitor, type LucideIcon } from 'lucide-react';
 import { Theme } from '../hooks/useTheme';
 
 interface ThemeToggleProps {
@@ -9,7 +9,7 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ theme, resolvedTheme, setTheme }: ThemeToggleProps) {
-  const options: { value: Theme; label: string; icon: React.ElementType }[] = [
+  const options: { value: Theme; label: string; icon: LucideIcon }[] = [
     { value: 'light', label: 'Claro', icon: Sun },
     { value: 'dark', label: 'Escuro', icon: Moon },
     { value: 'system', label: 'Sistema', icon: Monitor },

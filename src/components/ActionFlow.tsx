@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { motion } from 'motion/react';
 import { 
   CheckCircle2, 
@@ -53,7 +53,7 @@ export function ActionFlow({ howTo, ifOK, ifNOK, tips }: ActionFlowProps) {
   if (!hasFlow) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Quick Tips - Badges visuais no topo */}
       {tips && tips.length > 0 && (
         <motion.div 
@@ -79,7 +79,7 @@ export function ActionFlow({ howTo, ifOK, ifNOK, tips }: ActionFlowProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-2xl p-5"
+          className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-2xl p-3 sm:p-5"
         >
           <div className="flex items-center gap-2 mb-4">
             <div className="p-2 bg-blue-500/20 rounded-lg">
@@ -104,7 +104,7 @@ export function ActionFlow({ howTo, ifOK, ifNOK, tips }: ActionFlowProps) {
                   <div className="absolute left-5 top-10 w-0.5 h-6 bg-gradient-to-b from-blue-500/40 to-transparent" />
                 )}
                 
-                <div className="flex gap-4">
+                <div className="flex gap-3 sm:gap-4">
                   {/* Step number bubble */}
                   <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500/20 border-2 border-blue-500/40 flex items-center justify-center text-blue-300 font-bold text-sm">
                     {step.order}
@@ -146,7 +146,7 @@ export function ActionFlow({ howTo, ifOK, ifNOK, tips }: ActionFlowProps) {
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
             {/* OK Path - Verde */}
             {ifOK && (
               <motion.div

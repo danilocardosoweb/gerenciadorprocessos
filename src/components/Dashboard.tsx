@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 // v1.1 - Added Save button to context menu
-import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, Sparkles, LogOut, User, Sun, Moon, Save, CheckSquare, Globe, Lock, Building2, Eye, Check, X, RefreshCw } from 'lucide-react';
+import { FolderOpen, Network, Plus, Search, ChevronRight, Settings2, MoreVertical, Calendar, FileText, Edit2, MoveRight, Trash2, Box, LogOut, User, Sun, Moon, Save, CheckSquare, Globe, Lock, Building2, Eye, Check, X, RefreshCw, Upload } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { MapJsonImportModal } from './MapJsonImportModal';
 
 // Helper to format dates nicely
 function formatDate(dateStr: string): string {
@@ -40,7 +41,6 @@ function formatDate(dateStr: string): string {
 import { SettingsModal } from './SettingsModal';
 import { ConfirmModal } from './ConfirmModal';
 import { NewItemModal, type NewItemData } from './NewItemModal';
-import { AiImportModal } from './AiImportModal';
 import { DocumentManager, DocumentItem } from './DocumentManager';
 import { TaskManager } from './TaskManager';
 import { GlobalMetrics } from './GlobalMetrics';
@@ -56,7 +56,8 @@ import { useTheme } from '../hooks/useTheme';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { MobileLayout, useIsMobile } from './MobileLayout';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Target } from 'lucide-react';
+import { AssessmentDashboard } from './AssessmentDashboard';
 
 export interface ProcessItem {
   id: string;
@@ -89,7 +90,7 @@ const initialData: ProcessItem[] = [
       {
         id: 'm1',
         title: 'Célula de Usinagem 04 - Eixos',
-        description: 'Fluxo completo IATF 16949 para eixos de transmissão.',
+        description: 'Fluxo completo IATF 16949 para eixos de transmisso.',
         type: 'map',
         updatedAt: 'Hoje, 10:32',
       },
@@ -106,7 +107,7 @@ const initialData: ProcessItem[] = [
         description: 'Regras de inspeção e tolerâncias para todas as células de usinagem.',
         type: 'markdown',
         updatedAt: 'Ontem, 16:45',
-        content: '# Diretrizes de Qualidade\\n\\nEstas são as diretrizes gerais para o processo de usinagem e inspeção de tolerâncias.\\n\\n## Regras Essenciais\\n- Manter a rugosidade Ra < 1.6 nas faces de vedação.\\n- Inspecionar a cada 50 peças ou troca de inserto (o que ocorrer primeiro).\\n\\n| Parâmetro | Tolerância | Frequência de Medição |\\n| :--- | :--- | :--- |\\n| Diâmetro Externo | +/- 0.05mm | 100% |\\n| Comprimento | +/- 0.10mm | A cada setup |\\n\\n### Referências IATF\\n- IATF 8.5.1\\n- IATF 9.1.1'
+        content: '# Diretrizes de Qualidade\\n\\nEstas são as diretrizes gerais para o processo de usinagem e inspeção de tolerâncias.\\n\\n## Regras Essenciais\\n- Manter a rugosidade Ra < 1,6 nas faces de vedação.\\n- Inspecionar a cada 50 peças ou troca de inserto (o que ocorrer primeiro).\\n\\n| Parâmetro | Tolerância | Frequência de medição |\\n| :--- | :--- | :--- |\\n| Diâmetro externo | +/- 0,05 mm | 100% |\\n| Comprimento | +/- 0,10 mm | A cada setup |\\n\\n### Referências IATF\\n- IATF 8.5.1\\n- IATF 9.1.1'
       }
     ]
   },
@@ -136,10 +137,10 @@ const initialData: ProcessItem[] = [
   {
     id: 'md2',
     title: 'Ideias para Melhoria Contínua',
-    description: 'Rascunho de ideias para o comitê de inovação da produção.',
+    description: 'Rascunho de ideias para o comit de inovao da produção.',
     type: 'markdown',
     updatedAt: 'Há 1 semana',
-    content: '# Melhoria Contínua (Kaizen)\\n\\nIdeias levantadas durante o *Gemba Walk*:\\n\\n1. **Redução de Setup na Linha A**\\n   - Criar gabarito rápido para ajuste dos guias.\\n   - Identificar ferramentas de setup com cores.\\n\\n2. **Logística Inbound**\\n   - Sincronização via EDI com o fornecedor X.\\n   - Kanban visual com tags RFID para embalagens retornáveis.'
+    content: '# Melhoria Contnua (Kaizen)\\n\\nIdeias levantadas durante o *Gemba Walk*:\\n\\n1. **Reduo de Setup na Linha A**\\n   - Criar gabarito rpido para ajuste dos guias.\\n   - Identificar ferramentas de setup com cores.\\n\\n2. **Logstica Inbound**\\n   - Sincronizao via EDI com o fornecedor X.\\n   - Kanban visual com tags RFID para embalagens retornveis.'
   },
   {
     id: 'm4',
@@ -205,9 +206,10 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
+  const [isMapJsonImportOpen, setIsMapJsonImportOpen] = useState(false);
   const [modalInitialType, setModalInitialType] = useState<'map' | 'folder' | 'markdown' | 'sector3d'>('map');
-  const [isAiImportOpen, setIsAiImportOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isAssessmentDashboardOpen, setIsAssessmentDashboardOpen] = useState(false);
   
   // Context Menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -227,7 +229,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
 
   useEffect(() => {
     supabase.from('departments').select('*').order('created_at', { ascending: true }).then(({ data, error }) => {
-      if (error) console.error('❌ Error fetching departments:', error);
+      if (error) console.error('L Error fetching departments:', error);
       if (data) setAllDepts(data);
     });
   }, []);
@@ -252,17 +254,17 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     }
     const { error } = await supabase.from('process_items').update({ 
       workflow_status: 'needs_revision',
-      workflow_approver: currentUser?.name,
+      workflow_approver: currentUser.name,
       workflow_approved_at: new Date().toISOString(),
       workflow_comments: [rejectReason]
     }).eq('id', rejectItem.id);
     if (error) {
       alert('Erro ao rejeitar: ' + error.message);
     } else {
-      addLog?.({
-        userName: currentUser?.name || 'Desconhecido',
-        userEmail: currentUser?.email || '-',
-        userRole: currentUser?.role || '-',
+      addLog({
+        userName: currentUser.name || 'Desconhecido',
+        userEmail: currentUser.email || '-',
+        userRole: currentUser.role || '-',
         action: 'Rejeitar',
         details: `Item "${rejectItem.title}" rejeitado. Motivo: ${rejectReason}`,
         category: 'workflow'
@@ -277,16 +279,16 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     if (!approveItem) return;
     const { error } = await supabase.from('process_items').update({ 
       workflow_status: 'approved',
-      workflow_approver: currentUser?.name,
+      workflow_approver: currentUser.name,
       workflow_approved_at: new Date().toISOString()
     }).eq('id', approveItem.id);
     if (error) {
       alert('Erro ao aprovar: ' + error.message);
     } else {
-      addLog?.({
-        userName: currentUser?.name || 'Desconhecido',
-        userEmail: currentUser?.email || '-',
-        userRole: currentUser?.role || '-',
+      addLog({
+        userName: currentUser.name || 'Desconhecido',
+        userEmail: currentUser.email || '-',
+        userRole: currentUser.role || '-',
         action: 'Aprovar',
         details: `Item "${approveItem.title}" aprovado`,
         category: 'workflow'
@@ -306,7 +308,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // ── Visibility filter ────────────────────────────────────────────────────
+  //  Visibility filter 
   function filterByVisibility(list: ProcessItem[]): ProcessItem[] {
     if (!currentUser) return [];
     const isAdmin = currentUser.role === 'Administrador';
@@ -361,55 +363,47 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
   };
 
   const handleCreateItem = async (data: NewItemData) => {
-    // optimistic
-    const newItem: ProcessItem = {
-      id: Math.random().toString(),
-      title: data.title,
-      description: data.description,
-      type: data.type,
-      updatedAt: 'Agora mesmo',
-      items: data.type === 'folder' ? [] : undefined,
-      content: data.type === 'markdown' ? '# Novo Documento\n\nComece a editar aqui...' : undefined
-    };
-
-    let parentId = null;
-
-    if (currentFolder) {
-      parentId = currentFolder.id;
-      setItems(items.map(f => {
-        if (f.id === currentFolder.id) {
-          const newFolderItems = [...(f.items || []), newItem];
-          setCurrentFolder({ ...f, items: newFolderItems });
-          return { ...f, items: newFolderItems };
-        }
-        return f;
-      }));
-    } else {
-      setItems([...items, newItem]);
-    }
+    const parentId = currentFolder?.id ?? null;
+    const initialMapNodes = data.type === 'map'
+      ? [{
+          id: 'root',
+          type: 'mindmap',
+          position: { x: 0, y: 0 },
+          data: {
+            label: data.title.trim(),
+            nodeType: 'root',
+            category: 'root',
+            numberCode: '1.0',
+            creationState: 'guided',
+          },
+        }]
+      : null;
 
     const { data: inserted, error } = await supabase.from('process_items').insert({
       title: data.title,
       description: data.description,
       type: data.type,
       parent_id: parentId,
-      tags: [],
+      tags: data.tags || [],
       visibility: data.visibility,
       allowed_departments: data.allowed_departments,
       allowed_user_ids: data.allowed_user_ids,
       created_by: currentUser?.id ?? null,
-      nodes: data.nodes || null,
-      edges: data.edges || null,
+      nodes: data.nodes ?? initialMapNodes,
+      edges: data.edges ?? (data.type === 'map' ? [] : null),
+      node_details: data.nodeDetails ?? (data.type === 'map' ? {} : null),
     }).select().single();
 
     if (error) {
       console.error('Erro ao salvar item no Supabase:', error);
-      alert(`Erro ao salvar: ${error.message}`);
-      return;
+      throw new Error(error.message);
     }
 
-    console.log('Item salvo com sucesso:', inserted);
-    refreshData();
+    await refreshData();
+
+    if (data.type === 'map' && inserted?.id) {
+      onOpenMap(inserted.id, inserted.title || data.title);
+    }
   };
 
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -496,22 +490,23 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
               className="w-72 bg-white/5 border border-white/10 rounded-full pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all placeholder:text-slate-500"
             />
           </div>
-          {perms.can.importWithAI && (
-          <button 
-            onClick={() => setIsAiImportOpen(true)}
-            className="h-10 px-4 bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 border border-purple-500/30 font-bold text-sm rounded-full flex items-center gap-2 transition-all"
-          >
-            <Sparkles size={16} /> Importar com IA
-          </button>
-          )}
           {perms.can.createNode && (
-          <button 
-            onClick={() => setIsNewItemOpen(true)} 
-            className="inline-flex items-center justify-center gap-2.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-full shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-200 whitespace-nowrap"
-          >
-            <Plus size={18} strokeWidth={2.5} />
-            <span className="leading-none">Novo Item</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsMapJsonImportOpen(true)} 
+              className="inline-flex items-center justify-center gap-2.5 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-slate-200 text-sm font-medium rounded-full border border-white/10 transition-all duration-200 whitespace-nowrap"
+            >
+              <Upload size={16} strokeWidth={2.25} />
+              <span className="leading-none">Importar JSON</span>
+            </button>
+            <button 
+              onClick={() => setIsNewItemOpen(true)} 
+              className="inline-flex items-center justify-center gap-2.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-full shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-200 whitespace-nowrap"
+            >
+              <Plus size={18} strokeWidth={2.5} />
+              <span className="leading-none">Novo Item</span>
+            </button>
+          </div>
           )}
           {/* Analytics Button - Gerente+ only */}
           {perms.can.viewAnalytics && (
@@ -520,6 +515,15 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-medium rounded-xl border border-white/10 transition-all"
           >
             <BarChart3 size={18} /> Analytics
+          </button>
+          )}
+          {/* Assessment Dashboard Button - Gerente+ only */}
+          {perms.can.viewAssessmentAnalytics && (
+          <button
+            onClick={() => { setIsAssessmentDashboardOpen(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-medium rounded-xl border border-white/10 transition-all"
+          >
+            <Target size={18} /> Avaliações
           </button>
           )}
           {/* Theme Toggle */}
@@ -705,7 +709,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                         <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
                           {item.type === 'map' ? <Network size={20} /> : <FileText size={20} />}
                         </div>
-                        <span className="px-2 py-1 text-xs font-semibold bg-amber-500/20 text-amber-400 rounded-full">Em Revisão</span>
+                        <span className="px-2 py-1 text-xs font-semibold bg-amber-500/20 text-amber-400 rounded-full">Em Reviso</span>
                       </div>
                       <h4 className="text-white font-medium mb-1">{item.title}</h4>
                       <p className="text-slate-400 text-sm mb-3 line-clamp-2">{item.description}</p>
@@ -735,7 +739,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             </div>
           ) : folderTab === 'revision' ? (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-white">Precisa de Revisão</h3>
+              <h3 className="text-lg font-semibold text-white">Precisa de Reviso</h3>
               {needsRevision.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-500">
                   <RefreshCw size={48} className="mb-4 opacity-20" />
@@ -749,7 +753,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                         <div className="w-10 h-10 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center">
                           {item.type === 'map' ? <Network size={20} /> : <FileText size={20} />}
                         </div>
-                        <span className="px-2 py-1 text-xs font-semibold bg-orange-500/20 text-orange-400 rounded-full">Precisa Revisão</span>
+                        <span className="px-2 py-1 text-xs font-semibold bg-orange-500/20 text-orange-400 rounded-full">Precisa Reviso</span>
                       </div>
                       <h4 className="text-white font-medium mb-1">{item.title}</h4>
                       <p className="text-slate-400 text-sm mb-3 line-clamp-2">{item.description}</p>
@@ -758,7 +762,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                           <p className="text-xs text-red-300 font-semibold mb-1">Motivo da rejeição:</p>
                           <p className="text-xs text-red-200/80">{item.workflow_comments[0]}</p>
                           {item.workflow_approver && (
-                            <p className="text-[10px] text-red-300/60 mt-1">— {item.workflow_approver}</p>
+                            <p className="text-[10px] text-red-300/60 mt-1"> {item.workflow_approver}</p>
                           )}
                         </div>
                       )}
@@ -856,7 +860,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                                   if (error) {
                                     alert('Erro ao salvar: ' + error.message);
                                   } else {
-                                    alert('✅ Item salvo com sucesso!');
+                                    alert(' Item salvo com sucesso!');
                                   }
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2 text-sm text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/10 rounded-lg transition-colors"
@@ -890,11 +894,11 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                                         if (error) {
                                           alert('Erro ao enviar para revisão: ' + error.message);
                                         } else {
-                                          addLog?.({
-                                            userName: currentUser?.name || 'Desconhecido',
-                                            userEmail: currentUser?.email || '-',
-                                            userRole: currentUser?.role || '-',
-                                            action: 'Enviar para Revisão',
+                                          addLog({
+                                            userName: currentUser.name || 'Desconhecido',
+                                            userEmail: currentUser.email || '-',
+                                            userRole: currentUser.role || '-',
+                                            action: 'Enviar para Reviso',
                                             details: `Item "${item.title}" enviado para aprovação`,
                                             category: 'workflow'
                                           });
@@ -903,7 +907,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                                       }}
                                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 rounded-lg transition-colors"
                                     >
-                                      <Check size={16} /> Enviar para Revisão
+                                      <Check size={16} /> Enviar para Reviso
                                     </button>
                                   )}
                                   {item.workflow_status === 'review' && perms.can.approveTask && (
@@ -942,10 +946,10 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                                         if (error) {
                                           alert('Erro ao publicar: ' + error.message);
                                         } else {
-                                          addLog?.({
-                                            userName: currentUser?.name || 'Desconhecido',
-                                            userEmail: currentUser?.email || '-',
-                                            userRole: currentUser?.role || '-',
+                                          addLog({
+                                            userName: currentUser.name || 'Desconhecido',
+                                            userEmail: currentUser.email || '-',
+                                            userRole: currentUser.role || '-',
                                             action: 'Publicar',
                                             details: `Item "${item.title}" publicado`,
                                             category: 'workflow'
@@ -969,11 +973,11 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                                         if (error) {
                                           alert('Erro ao enviar para revisão: ' + error.message);
                                         } else {
-                                          addLog?.({
-                                            userName: currentUser?.name || 'Desconhecido',
-                                            userEmail: currentUser?.email || '-',
-                                            userRole: currentUser?.role || '-',
-                                            action: 'Enviar para Revisão',
+                                          addLog({
+                                            userName: currentUser.name || 'Desconhecido',
+                                            userEmail: currentUser.email || '-',
+                                            userRole: currentUser.role || '-',
+                                            action: 'Enviar para Reviso',
                                             details: `Item "${item.title}" reenviado para aprovação após revisão`,
                                             category: 'workflow'
                                           });
@@ -1019,8 +1023,8 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                           item.workflow_status === 'needs_revision' ? "bg-orange-500/20 text-orange-400" :
                           "bg-slate-500/20 text-slate-400"
                         )}>
-                          {item.workflow_status === 'review' ? 'Em Revisão' :
-                           item.workflow_status === 'needs_revision' ? 'Precisa Revisão' : item.workflow_status}
+                          {item.workflow_status === 'review' ? 'Em Reviso' :
+                           item.workflow_status === 'needs_revision' ? 'Precisa Reviso' : item.workflow_status}
                         </span>
                       )}
                     </div>
@@ -1033,7 +1037,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                     <span className="tabular-nums">{formatDate(item.updatedAt)}</span>
                     {item.type === 'folder' && (
                       <>
-                        <span className="mx-1">•</span>
+                        <span className="mx-1">"</span>
                         <span>{item.items?.length || 0} items</span>
                       </>
                     )}
@@ -1071,7 +1075,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
                     userEmail: currentUser?.email || '-',
                     userRole: currentUser?.role || '-',
                     action: 'Alterar Preferência',
-                    details: `Configuração "${key}" alterada para: ${value}`,
+                    details: `Configurao "${key}" alterada para: ${value}`,
                     category: 'config'
                   });
                 }
@@ -1081,15 +1085,6 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             enableAuditLog={enableAuditLog}
           />
         )}
-        {isAiImportOpen && (
-          <AiImportModal 
-            onClose={() => setIsAiImportOpen(false)}
-            onImport={(data) => {
-              handleCreateItem(data as any);
-              setIsAiImportOpen(false);
-            }}
-          />
-        )}
         {isNewItemOpen && (
           <NewItemModal
             onClose={() => setIsNewItemOpen(false)}
@@ -1097,6 +1092,13 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
             initialType={modalInitialType}
             currentUser={currentUser ?? undefined}
             isOpen={isNewItemOpen}
+          />
+        )}
+        {isMapJsonImportOpen && (
+          <MapJsonImportModal
+            isOpen={isMapJsonImportOpen}
+            onClose={() => setIsMapJsonImportOpen(false)}
+            onImport={handleCreateItem}
           />
         )}
         
@@ -1229,7 +1231,7 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
           </div>
           <h2 className="text-lg font-bold text-white mb-2 text-center">Aprovar Item</h2>
           <p className="text-sm text-slate-300 mb-6 text-center">{approveItem.title}</p>
-          <p className="text-xs text-slate-400 mb-6 text-center">Tem certeza que deseja aprovar este item? Após a aprovação, ele poderá ser publicado.</p>
+          <p className="text-xs text-slate-400 mb-6 text-center">Tem certeza que deseja aprovar este item Aps a aprovação, ele poder ser publicado.</p>
 
           <div className="flex gap-3">
             <button 
@@ -1256,10 +1258,18 @@ export function Dashboard({ currentUser, onLogout, preferences, setPreferences, 
         onClose={() => setDeleteConfirm(null)}
         onConfirm={doDeleteItem}
         title="Remover Item"
-        message="Tem certeza que deseja remover este item permanentemente? Esta ação não pode ser desfeita."
+        message="Tem certeza que deseja remover este item permanentemente Esta ação não pode ser desfeita."
         confirmText="Remover"
         cancelText="Cancelar"
         type="danger"
+      />,
+      document.body
+    )}
+
+    {isAssessmentDashboardOpen && createPortal(
+      <AssessmentDashboard
+        currentUserId={currentUser.id || ''}
+        onClose={() => setIsAssessmentDashboardOpen(false)}
       />,
       document.body
     )}

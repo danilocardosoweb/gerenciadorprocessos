@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+﻿import React, { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -231,7 +231,7 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
     try {
       const html = getEmailHTML().replace('max-width:760px', 'max-width:1100px');
 
-      // Create a hidden iframe so the full HTML (with inline styles) renders properly
+      // Create a hidden iframe são the full HTML (with inline styles) renders properly
       const iframe = document.createElement('iframe');
       iframe.style.cssText =
         'position:fixed;left:-9999px;top:0;width:1122px;height:1px;border:none;visibility:hidden;';
@@ -249,7 +249,7 @@ export function MeetingMinutesModal({ isOpen, onClose, tasks, currentUser }: Mee
 
       const doc  = iframe.contentDocument!;
       const body = doc.body;
-      // Expand iframe to full content height so nothing is clipped
+      // Expand iframe to full content height são nothing is clipped
       const fullHeight = Math.max(body.scrollHeight, body.offsetHeight);
       iframe.style.height = fullHeight + 'px';
       await new Promise(r => setTimeout(r, 100));

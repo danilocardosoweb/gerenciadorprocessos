@@ -102,8 +102,8 @@ export function useWorkflow(mapId: string, currentUser?: { name: string; email: 
   const getStatusLabel = (status: WorkflowStatus): string => {
     const labels: Record<WorkflowStatus, string> = {
       draft: 'Rascunho',
-      review: 'Em Revisão',
-      needs_revision: 'Precisa de Revisão',
+      review: 'Em Reviso',
+      needs_revision: 'Precisa de Reviso',
       approved: 'Aprovado',
       published: 'Publicado',
       archived: 'Arquivado',
