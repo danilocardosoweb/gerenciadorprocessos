@@ -682,19 +682,19 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
             onClick={onClose}
             className="fixed inset-0 z-40 bg-[#0f172a]/60 backdrop-blur-md"
           />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 pointer-events-none">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="pointer-events-auto w-full max-w-[96vw] xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] overflow-hidden flex flex-col bg-black/40 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-3xl"
+              className="pointer-events-auto w-full max-w-[96vw] xl:max-w-6xl 2xl:max-w-7xl h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[92vh] overflow-hidden flex flex-col bg-[#080f1d]/98 sm:bg-black/40 backdrop-blur-2xl border-0 sm:border border-white/20 shadow-2xl rounded-none sm:rounded-3xl"
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b border-white/10 bg-white/5">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-500/20 text-blue-400 rounded-xl">
-                    <Info size={28} />
+              <div className="flex items-start justify-between gap-2 p-3 sm:p-6 border-b border-white/10 bg-white/5 safe-top">
+                <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
+                  <div className="mt-0.5 shrink-0 p-2.5 sm:p-3 bg-blue-500/20 text-blue-400 rounded-xl">
+                    <Info className="h-6 w-6 sm:h-7 sm:w-7" />
                   </div>
                   <div className="flex-1 min-w-0">
                     {isEditingLabel ? (
@@ -726,9 +726,9 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 group">
+                      <div className="flex min-w-0 items-start gap-2 group">
                         <h2 
-                          className="text-2xl font-bold text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors"
+                          className="min-w-0 break-words text-lg sm:text-2xl font-bold leading-tight text-white tracking-tight cursor-pointer hover:text-blue-300 transition-colors"
                           onClick={() => setIsEditingLabel(true)}
                           title="Clique para editar"
                         >
@@ -750,7 +750,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-0.5 sm:gap-2">
                   {onWritingSuggestionsEnabledChange && (
                     <button
                       type="button"
@@ -769,7 +769,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                   )}
                   <button
                     onClick={() => setIsCommentsOpen(true)}
-                    className="p-3 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors relative"
+                    className="p-2 sm:p-3 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors relative"
                     title="Comentários"
                   >
                     <MessageSquare size={24} />
@@ -781,7 +781,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                   </button>
                   <button
                     onClick={onClose}
-                    className="p-3 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                    className="p-2 sm:p-3 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
                   >
                     <X size={24} />
                   </button>
@@ -789,10 +789,10 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
               </div>
 
               {/* Content Grid */}
-              <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 grid grid-cols-1 xl:grid-cols-12 gap-3 sm:gap-6">
                 {/* Left Column: Info & Tasks */}
                 <div className="contents">
-                  <section className="xl:order-1 xl:col-span-7 rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+                  <section className="xl:order-1 xl:col-span-7 rounded-2xl border border-white/10 bg-white/[0.035] p-4 sm:p-5">
                     <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest mb-3 flex items-center gap-2">
                       Detalhes Analíticos
                     </h3>
@@ -800,13 +800,13 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                       value={details.description}
                       onValueChange={(description) => onUpdateDetails(nodeId, { ...details, description })}
                       corpus={suggestionCorpus}
-                      className="w-full h-40 p-4 pb-14 text-sm rounded-xl border border-white/10 bg-white/5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none shadow-inner"
+                      className="w-full min-h-[150px] sm:h-40 p-4 pb-14 text-sm rounded-xl border border-white/10 bg-white/5 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-y shadow-inner"
                       placeholder="Descreva o contexto, especificações ou impactos deste nó no processo..."
                     />
                   </section>
 
-                  <section className="xl:order-3 xl:col-span-12 rounded-2xl border border-white/10 bg-white/[0.035] p-5 space-y-4">
-                    <div className="flex items-start justify-between gap-4">
+                  <section className="xl:order-3 xl:col-span-12 rounded-2xl border border-white/10 bg-white/[0.035] p-4 sm:p-5 space-y-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
                       <div>
                         <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest">
                           Inteligência Operacional
@@ -820,7 +820,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-3 xl:grid-cols-4">
                       <div>
                         <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Tipo avançado</label>
                         <select
@@ -1259,7 +1259,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                 </div>
 
                 {/* Right Column: Media Gallery - Node Level Images */}
-                <div className="xl:order-2 xl:col-span-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+                <div className="xl:order-2 xl:col-span-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">

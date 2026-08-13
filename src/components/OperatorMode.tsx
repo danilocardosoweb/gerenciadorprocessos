@@ -989,7 +989,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
             </div>
 
             {/* hero */}
-            <div className="relative flex flex-col items-center justify-center min-h-full px-6 sm:px-8 text-center py-10">
+            <div className="relative flex flex-col items-center justify-start sm:justify-center min-h-full px-4 sm:px-8 text-center py-6 sm:py-10">
               <p className="text-[10px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-2">
                 {mode === 'training' ? 'Modo Treinamento · Aprendizado Guiado' : 'Modo Operador · Execução Guiada'}
               </p>
@@ -1011,7 +1011,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                   : 'Veja somente o essencial da etapa atual: o que fazer, como conferir e como reagir se algo sair do padrão.'}
               </p>
 
-              <div className="mt-10 flex flex-wrap gap-4 justify-center">
+              <div className="mt-6 sm:mt-10 flex flex-wrap gap-3 sm:gap-4 justify-center">
                 <button
                   onClick={() => { handleStart(0); enterFullscreen(); }}
                   className="flex items-center gap-2 bg-emerald-500 text-slate-900 font-bold text-base px-6 py-3 rounded-xl shadow-[0_12px_30px_rgba(16,185,129,0.3)] hover:bg-emerald-400 active:scale-95 transition-all"
@@ -1033,17 +1033,17 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
               </div>
 
               {/* phase cards */}
-              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 w-full max-w-5xl">
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 w-full max-w-5xl">
                 {phases.map((phase, index) => (
                   <button
                     key={phase.id}
                     onClick={() => { handleStart(index); enterFullscreen(); }}
-                    className="group bg-white/5 border border-white/10 rounded-xl p-3 text-left hover:border-blue-400/60 hover:bg-white/10 transition-all active:scale-[0.97]"
+                    className="group min-h-[92px] bg-white/5 border border-white/10 rounded-xl p-4 text-left hover:border-blue-400/60 hover:bg-white/10 transition-all active:scale-[0.97]"
                   >
                     <span className="text-[8px] font-bold text-blue-300 tracking-[0.2em] uppercase">Fase {index + 1}</span>
                     <h3 className="text-sm font-bold text-white mt-1 mb-0.5 leading-tight">{phase.title}</h3>
                     <p className="text-[10px] text-slate-500">{phase.steps.length} etapas</p>
-                    <div className="mt-2 flex justify-end">
+                    <div className="mt-1 flex justify-end">
                       <ArrowRight className="text-blue-400 group-hover:translate-x-1 transition-transform" size={14} />
                     </div>
                   </button>

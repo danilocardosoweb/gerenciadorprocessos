@@ -172,6 +172,29 @@ html.light .bg-indigo-600\/20 { background-color: var(--orb2) !important; }
   }
 }
 
+.safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+@media (max-width: 639px) {
+  .mobile-tab-scroll {
+    scrollbar-width: none;
+  }
+
+  .mobile-tab-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .react-flow__controls {
+    bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
+    left: 0.5rem !important;
+  }
+
+  .react-flow__panel {
+    max-width: calc(100vw - 0.75rem);
+  }
+}
+
 /* Backdrop blur overlays */
 html.light .bg-\[\#0f172a\]\/80,
 html.light .bg-\[\#0a1120\]\/85 {

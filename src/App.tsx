@@ -86,6 +86,19 @@ const AppLoadingScreen = () => (
   </div>
 );
 
+type MapPanelDisplay = 'full' | 'compact' | 'hidden';
+
+const readMapPanelDisplay = (key: string, fallback: MapPanelDisplay): MapPanelDisplay => {
+  const value = window.localStorage.getItem(key);
+  return value === 'full' || value === 'compact' || value === 'hidden' ? value : fallback;
+};
+
+const MAP_PANEL_DISPLAY_OPTIONS: Array<{ value: MapPanelDisplay; label: string }> = [
+  { value: 'full', label: 'Completo' },
+  { value: 'compact', label: 'Minimalista' },
+  { value: 'hidden', label: 'Oculto' },
+];
+
 const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   emptyMapTemplate.nodes,
   emptyMapTemplate.edges,
@@ -745,6 +758,11 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
   const [hoverPosition, setHoverPosition] = useState<{ x: number, y: number } | null>(null);
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<string[]>([]);
   const [operationalMetricFilter, setOperationalMetricFilter] = useState<'ctq' | 'audit' | 'risk' | 'evidence' | 'troubleshooting' | null>(null);
+  const [mobileInsightsOpen, setMobileInsightsOpen] = useState(false);
+  const [technicalPanelDisplay, setTechnicalPanelDisplay] = useState<MapPanelDisplay>(() => readMapPanelDisplay('tecno-map-technical-panel', 'full'));
+  const [minimapDisplay, setMinimapDisplay] = useState<MapPanelDisplay>(() => readMapPanelDisplay('tecno-map-minimap', 'full'));
+  const [toolsPanelDisplay, setToolsPanelDisplay] = useState<MapPanelDisplay>(() => readMapPanelDisplay('tecno-map-tools-panel', 'full'));
+  const [isVisualOptionsOpen, setIsVisualOptionsOpen] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   // Assessment State
@@ -1213,16 +1231,43 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
       const cleanEdges = sanitizeEdgesForSave(edges as Edge[]);
       const cleanNodeDetails = sanitizeNodeDetailsMap(nodeDetailsMap, cleanNodes);
 
-      const { error } = await supabase
-        .from('process_items')
-        .update({
-          nodes: cleanNodes,
-          edges: cleanEdges,
-          node_details: cleanNodeDetails,
-        })
-        .eq('id', mapId);
+      const payload = {
+        nodes: cleanNodes,
+        edges: cleanEdges,
+        node_details: cleanNodeDetails,
+      };
 
-      if (error) throw error;
+      let saveError: any = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        let error: any = null;
+        try {
+          const result = await supabase
+            .from('process_items')
+            .update(payload)
+            .eq('id', mapId);
+          error = result.error;
+        } catch (requestError) {
+          error = requestError;
+        }
+
+        if (!error) {
+          saveError = null;
+          break;
+        }
+
+        saveError = error;
+        const message = String(error?.message || '').toLowerCase();
+        const isTemporaryNetworkError = (
+          message.includes('networkerror')
+          || message.includes('failed to fetch')
+          || message.includes('fetch resource')
+          || !navigator.onLine
+        );
+        if (!isTemporaryNetworkError || attempt === 2) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+      }
+
+      if (saveError) throw saveError;
 
       setNodes(cleanNodes as any);
       setEdges(cleanEdges as any);
@@ -1231,7 +1276,20 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
       success('Mapa salvo', 'As posições, nós e conexões foram salvos no banco.');
     } catch (err: any) {
       console.error('Error saving map layout:', err);
-      warning('Erro ao salvar', err.message || 'Não foi possível salvar o mapa no banco.');
+      const message = String(err?.message || '');
+      const isNetworkError = (
+        message.toLowerCase().includes('networkerror')
+        || message.toLowerCase().includes('failed to fetch')
+        || message.toLowerCase().includes('fetch resource')
+        || !navigator.onLine
+      );
+      warning(
+        isNetworkError ? 'Conexão instável' : 'Erro ao salvar',
+        isNetworkError
+          ? 'O mapa continua aberto e suas alterações estão pendentes. Verifique a internet e toque em Salvar novamente.'
+          : message || 'Não foi possível salvar o mapa no banco.',
+        8000,
+      );
     } finally {
       setIsSavingMap(false);
     }
@@ -1636,6 +1694,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
   // Export Menu State
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const visualOptionsRef = useRef<HTMLDivElement>(null);
   
   // Work Instruction Export Modal
   const [isWorkInstructionOpen, setIsWorkInstructionOpen] = useState(false);
@@ -1713,6 +1772,23 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('tecno-map-technical-panel', technicalPanelDisplay);
+    window.localStorage.setItem('tecno-map-minimap', minimapDisplay);
+    window.localStorage.setItem('tecno-map-tools-panel', toolsPanelDisplay);
+    if (technicalPanelDisplay === 'hidden') setMobileInsightsOpen(false);
+  }, [technicalPanelDisplay, minimapDisplay, toolsPanelDisplay]);
+
+  useEffect(() => {
+    const handleVisualOptionsOutside = (event: MouseEvent) => {
+      if (visualOptionsRef.current && !visualOptionsRef.current.contains(event.target as HTMLElement)) {
+        setIsVisualOptionsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleVisualOptionsOutside);
+    return () => document.removeEventListener('mousedown', handleVisualOptionsOutside);
   }, []);
 
   // Search functionality
@@ -2411,7 +2487,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
       <div className="flex-1 h-full relative z-10 w-full flex flex-col">
         {/* Map Header when not presenting */}
         {!isPresenting && (
-          <div className="bg-white/[0.02] backdrop-blur-xl border-b border-white/5 shrink-0 z-20 px-3 sm:px-6 py-3">
+          <div className="bg-white/[0.02] backdrop-blur-xl border-b border-white/5 shrink-0 z-20 px-3 sm:px-6 py-2.5 sm:py-3 safe-top">
             <div className="flex flex-col gap-3">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
@@ -2422,9 +2498,9 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                   >
                     <ArrowLeft size={16} />
                   </button>
-                  <div className="min-w-0 hidden sm:block flex-1">
-                    <p className="text-[9px] text-slate-400 uppercase tracking-[0.4em] font-semibold m-0">Procedimento</p>
-                    <h1 className="text-base lg:text-xl font-bold tracking-tight text-white m-0 leading-tight truncate">
+                  <div className="min-w-0 flex-1">
+                    <p className="hidden sm:block text-[9px] text-slate-400 uppercase tracking-[0.4em] font-semibold m-0">Procedimento</p>
+                    <h1 className="truncate text-xs font-bold leading-tight tracking-tight text-white sm:text-base lg:text-xl">
                       {mapTitle}
                     </h1>
                   </div>
@@ -2484,6 +2560,57 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                         <Plus size={15} />
                         <span className="hidden 2xl:inline text-sm font-medium">Adicionar</span>
                       </button>
+                      <div className="relative" ref={visualOptionsRef}>
+                        <button
+                          type="button"
+                          onClick={() => setIsVisualOptionsOpen((open) => !open)}
+                          className={cn(
+                            'flex h-9 w-9 items-center justify-center rounded-xl border transition-colors sm:w-auto sm:px-3 sm:py-2',
+                            isVisualOptionsOpen
+                              ? 'border-blue-400/30 bg-blue-500/15 text-blue-200'
+                              : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10',
+                          )}
+                          title="Personalizar painéis do mapa"
+                          aria-label="Personalizar visualização do mapa"
+                        >
+                          <Settings2 size={15} />
+                          <span className="ml-2 hidden 2xl:inline text-sm font-medium">Visualização</span>
+                        </button>
+                        {isVisualOptionsOpen && (
+                          <div className="absolute right-0 top-full z-50 mt-2 w-[min(320px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-[#0b1629]/98 p-3 shadow-2xl backdrop-blur-2xl">
+                            <div className="mb-3">
+                              <p className="text-sm font-bold text-white">Organizar área de trabalho</p>
+                              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">Escolha quanto espaço cada apoio deve ocupar. As preferências ficam salvas neste aparelho.</p>
+                            </div>
+                            {[
+                              { label: 'Resumo técnico', value: technicalPanelDisplay, setter: setTechnicalPanelDisplay },
+                              { label: 'Minimapa', value: minimapDisplay, setter: setMinimapDisplay },
+                              { label: 'Ferramentas', value: toolsPanelDisplay, setter: setToolsPanelDisplay },
+                            ].map((item) => (
+                              <div key={item.label} className="border-t border-white/5 py-2.5 first:border-t-0">
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
+                                <div className="grid grid-cols-3 gap-1 rounded-xl bg-black/20 p-1">
+                                  {MAP_PANEL_DISPLAY_OPTIONS.map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => item.setter(option.value)}
+                                      className={cn(
+                                        'rounded-lg px-2 py-2 text-[10px] font-semibold transition-colors',
+                                        item.value === option.value
+                                          ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                                          : 'text-slate-400 hover:bg-white/5 hover:text-white',
+                                      )}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <div className="relative" ref={exportMenuRef}>
                         <button
                           onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
@@ -2550,8 +2677,8 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                 </div>
               </div>
 
-              <div className="w-full flex justify-start 2xl:justify-center overflow-x-auto custom-scrollbar">
-                <div className="flex items-center gap-1 bg-[#0a1628] border border-white/10 rounded-2xl p-1 shadow-xl min-w-max">
+              <div className="mobile-tab-scroll relative -mx-3 flex w-[calc(100%+1.5rem)] snap-x snap-mandatory justify-start overflow-x-auto px-3 pb-1 sm:mx-0 sm:w-full sm:px-0 2xl:justify-center custom-scrollbar">
+                <div className="flex min-w-max items-center gap-1 rounded-2xl border border-white/10 bg-[#0a1628] p-1 shadow-xl">
                   {OPERATIONAL_VIEW_OPTIONS.map((option) => {
                     const isActive = viewMode === option.value;
                     return (
@@ -2559,7 +2686,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                         key={option.value}
                         onClick={() => setViewMode(option.value)}
                         className={cn(
-                          'px-3 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap border',
+                          'snap-start px-3 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap border',
                           isActive ?
                              'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/40 text-white shadow-[0_0_16px_rgba(59,130,246,0.35)]'
                             : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5',
@@ -2607,8 +2734,11 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
               {!isPresenting && (
                 <>
                   <Controls className="!bg-white/5 !border-white/10 !backdrop-blur-xl !shadow-sm !rounded-xl overflow-hidden [&>button]:!border-b [&>button]:!border-white/5 [&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button:hover]:!bg-white/10 [&>button:hover]:!text-white" />
-                  <MiniMap 
-                    className="!bg-[#0f172a]/90 !border-white/10 !backdrop-blur-xl !shadow-sm !rounded-xl"
+                  {minimapDisplay !== 'hidden' && <MiniMap
+                    className={cn(
+                      'hidden sm:block !bg-[#0f172a]/90 !border-white/10 !backdrop-blur-xl !shadow-sm !rounded-xl transition-all',
+                      minimapDisplay === 'compact' && '!h-[110px] !w-[150px]',
+                    )}
                     maskColor="rgba(15, 23, 42, 0.7)"
                     nodeColor={(n: any) => {
                       if (n.data?.category === 'root') return '#4f46e5';
@@ -2624,7 +2754,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                       if (n.data?.category === 'compliance') return '#22d3ee';
                       return '#475569';
                     }}
-                  />
+                  />}
                 </>
               )}
               {isPresenting && presentationGuidedMode && (
@@ -2811,16 +2941,19 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
               )}
 
               {/* Layout Controls Panel */}
-              {!isPresenting && (
+              {!isPresenting && toolsPanelDisplay !== 'hidden' && (
                 <Panel position="top-right" className="mt-4">
-                  <div className="flex flex-col gap-2 bg-[#0f172a]/90 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 shadow-2xl">
+                  <div className={cn(
+                    'flex flex-col gap-2 bg-[#0f172a]/90 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 shadow-2xl',
+                    toolsPanelDisplay === 'compact' && 'gap-1',
+                  )}>
                     <button
                       onClick={handleAutoLayout}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-all"
                       title="Auto-arrumar layout"
                     >
                       <LayoutGrid size={16} />
-                      <span>Auto-arrumar</span>
+                      <span className={cn(toolsPanelDisplay === 'compact' && 'sr-only')}>Auto-arrumar</span>
                     </button>
                     <button
                       onClick={togglePositionLock}
@@ -2833,7 +2966,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                       title={positionsLocked ? 'Destravar para movimentar os nós livremente' : 'Travar as posições atuais'}
                     >
                       {positionsLocked ? <Lock size={16} /> : <Unlock size={16} />}
-                      <span>{positionsLocked ? 'Posições travadas' : 'Edição livre'}</span>
+                      <span className={cn(toolsPanelDisplay === 'compact' && 'sr-only')}>{positionsLocked ? 'Posições travadas' : 'Edição livre'}</span>
                     </button>
                     {nodes.length > 20 && (
                       <button
@@ -2854,7 +2987,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                         title={collapsedNodeIds.length > 0 ? 'Exibir todos os subníveis' : 'Mostrar somente as macrofases'}
                       >
                         {collapsedNodeIds.length > 0 ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        <span>{collapsedNodeIds.length > 0 ? 'Expandir tudo' : 'Recolher fases'}</span>
+                        <span className={cn(toolsPanelDisplay === 'compact' && 'sr-only')}>{collapsedNodeIds.length > 0 ? 'Expandir tudo' : 'Recolher fases'}</span>
                       </button>
                     )}
                     {perms.can.viewAssessments && (
@@ -2864,7 +2997,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                         title="Avaliações"
                       >
                         <Target size={16} />
-                        <span>Avaliações</span>
+                        <span className={cn(toolsPanelDisplay === 'compact' && 'sr-only')}>Avaliações</span>
                       </button>
                     )}
                     {perms.can.createAssessment && (
@@ -2874,7 +3007,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                         title="Gerenciar avaliações"
                       >
                         <Settings2 size={16} />
-                        <span>Gerenciar</span>
+                        <span className={cn(toolsPanelDisplay === 'compact' && 'sr-only')}>Gerenciar</span>
                       </button>
                     )}
                     {perms.can.viewAssessmentAnalytics && (
@@ -2884,21 +3017,47 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                         title="Dashboard de avaliações"
                       >
                         <BarChart3 size={16} />
-                        <span>Analytics</span>
+                        <span className={cn(toolsPanelDisplay === 'compact' && 'sr-only')}>Analytics</span>
                       </button>
                     )}
                   </div>
                 </Panel>
               )}
 
-              {!isPresenting && (
-                <Panel position="top-left" className="mt-4 ml-2 max-w-[360px]">
+              {!isPresenting && technicalPanelDisplay !== 'hidden' && !mobileInsightsOpen && (
+                <Panel position="top-left" className={cn('mt-2 ml-1', technicalPanelDisplay === 'full' && 'sm:hidden')}>
+                  <button
+                    type="button"
+                    onClick={() => setMobileInsightsOpen(true)}
+                    className="flex items-center gap-2 rounded-xl border border-blue-400/20 bg-[#0b1629]/95 px-3 py-2 text-xs font-bold text-blue-200 shadow-xl backdrop-blur-xl"
+                  >
+                    <Gauge size={15} /> {technicalPanelDisplay === 'compact' ? currentViewMeta.label : 'Resumo técnico'}
+                  </button>
+                </Panel>
+              )}
+
+              {!isPresenting && technicalPanelDisplay !== 'hidden' && (
+                <Panel position="top-left" className={cn(
+                  'mt-2 ml-1 w-[calc(100vw-0.75rem)] sm:mt-4 sm:ml-2 sm:w-auto sm:max-w-[360px]',
+                  !mobileInsightsOpen && technicalPanelDisplay === 'full' && 'hidden sm:block',
+                  !mobileInsightsOpen && technicalPanelDisplay === 'compact' && 'hidden',
+                )}>
                   <div className="bg-[#0f172a]/92 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/10 bg-white/5">
-                      <p className="text-[10px] uppercase tracking-[0.35em] text-blue-300 font-bold">
-                        {currentViewMeta.label}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">{currentViewMeta.description}</p>
+                    <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-white/10 bg-white/5">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.35em] text-blue-300 font-bold">
+                          {currentViewMeta.label}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">{currentViewMeta.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMobileInsightsOpen(false)}
+                        className="-mr-1 -mt-1 rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white sm:hidden"
+                        aria-label="Fechar resumo técnico"
+                      >
+                        <X size={18} />
+                      </button>
                     </div>
 
                     {!isGuidedMode && (
