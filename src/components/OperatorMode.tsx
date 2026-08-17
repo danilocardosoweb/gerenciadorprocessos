@@ -5,6 +5,7 @@ import { Edge, Node } from '@xyflow/react';
 import { NodeDetails } from './NodeModal';
 import { ActionFlow } from './ActionFlow';
 import { normalizeOperationalMetadata, type OperationalModeName } from '../lib/operationalModel';
+import { normalizeMediaSources } from '../lib/processMedia';
 
 interface OperatorModeProps {
   mapTitle: string;
@@ -89,23 +90,6 @@ interface OperatorSummaryCard {
   tone: SummaryTone;
   items: string[];
 }
-
-const FALLBACK_IMAGES = [
-  'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1505852679233-d9fd70aff56d?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1200&q=80',
-];
-
-const hashCode = (input: string) => {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash << 5) - hash + input.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-};
 
 const CRITICAL_KEYWORDS = ['conferir', 'verificar', 'checar', 'garantir', 'confirmar código', 'no ligar', 'perigo', 'crítico', 'obrigatório', 'nunca', 'sempre', 'segurança', 'emergência'];
 const INFO_KEYWORDS = ['anotar', 'registrar', 'informar', 'observar', 'horário', 'comunicar', 'informativo'];
@@ -370,7 +354,7 @@ const buildChecklist = (
     const taskHowTo = Array.isArray(task.howTo) ? task.howTo.filter(Boolean) : [];
     const taskTips = Array.isArray(task.tips) ? task.tips.filter(Boolean) : [];
     const taskFiles = Array.isArray(task.files) ? task.files.filter(Boolean) : [];
-    const taskImages = Array.isArray(task.images) ? task.images.filter(Boolean) : [];
+    const taskImages = normalizeMediaSources(task.images);
 
     return {
       text,
@@ -430,21 +414,21 @@ const buildChecklist = (
   }));
 };
 
-const pickImage = (details?: NodeDetails, seed = '0') => {
-  if (details?.images?.length) {
-    return details.images[0];
-  }
-  return `${FALLBACK_IMAGES[hashCode(seed) % FALLBACK_IMAGES.length]}&sat=${(hashCode(seed) % 40) + 60}`;
+const pickImages = (details?: NodeDetails): string[] => {
+  const nodeImages = normalizeMediaSources(details?.images);
+  const taskImages = Array.isArray(details?.tasks)
+    ? details.tasks.flatMap((task) => normalizeMediaSources(task.images))
+    : [];
+
+  return normalizeMediaSources([...nodeImages, ...taskImages]).slice(0, 6);
 };
 
-const hasVisualReference = (details?: NodeDetails) => (
-  Array.isArray(details?.images) && details.images.some((image) => typeof image === 'string' && image.trim().length > 0)
-);
+const pickImage = (details?: NodeDetails) => pickImages(details)[0] || '';
 
-const pickImages = (details?: NodeDetails, seed = '0'): string[] => {
-  if (details?.images?.length) return details.images.slice(0, 6);
-  return [`${FALLBACK_IMAGES[hashCode(seed) % FALLBACK_IMAGES.length]}&sat=${(hashCode(seed) % 40) + 60}`];
-};
+const hasVisualReference = (details?: NodeDetails) => pickImages(details).length > 0;
+
+const isVideoMedia = (source: string) => /\.(mp4|webm|ogg)(?:$|[?#])/i.test(source);
+const isGifMedia = (source: string) => /\.gif(?:$|[?#])/i.test(source);
 
 // File Attachment Component
 const FileAttachments = ({ files }: { files: AttachedFile[] }) => {
@@ -724,11 +708,14 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
   const [refMode, setRefMode] = useState<'image' | 'compare'>('image');
   const [isImageCollapsed, setIsImageCollapsed] = useState(false);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [mediaLoadError, setMediaLoadError] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const imgRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
 
   const phases = useMemo<OperatorPhase[]>(() => {
     if (!nodes.length) return [];
@@ -759,8 +746,8 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
         description: details.description || data.description || 'Siga as instruções apresentadas nesta etapa.',
         checklist,
         rawChecklist: checklist.map(c => c.text),
-        image: pickImage(details, node.id),
-        images: pickImages(details, node.id),
+        image: pickImage(details),
+        images: pickImages(details),
         hasVisualReference: hasVisualReference(details),
         operational,
         severity:
@@ -801,6 +788,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
 
   const currentPhase = phases[phaseIndex];
   const currentStep = currentPhase?.steps[stepIndex];
+  const activeMediaSource = currentStep?.images[activeImageIdx] || currentStep?.image || '';
   const totalSteps = phases.reduce((sum, phase) => sum + phase.steps.length, 0);
   const completedSteps = phases.slice(0, phaseIndex).reduce((sum, phase) => sum + phase.steps.length, 0) + stepIndex;
   const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
@@ -817,11 +805,17 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
       || Boolean(item.ifNOK)
     ));
     setExpandedItem(firstGuidedItem?.text || null);
-    setIsImageCollapsed(!currentStep?.hasVisualReference);
+    if ((currentStep?.images.length ?? 0) < 2) setRefMode('image');
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
     setActiveImageIdx(0);
+    mainContentRef.current?.scrollTo({ top: 0 });
+    leftPanelRef.current?.scrollTo({ top: 0 });
   }, [phaseIndex, stepIndex, currentStep]);
+
+  useEffect(() => {
+    setMediaLoadError(false);
+  }, [activeMediaSource]);
 
   const handleStart = (index = 0) => {
     setPhaseIndex(index);
@@ -1094,14 +1088,14 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
               </span>
 
               {/* Expand image button - discreet when collapsed */}
-              {isImageCollapsed && currentStep.hasVisualReference && (
+              {isImageCollapsed && (
                 <button
                   onClick={() => setIsImageCollapsed(false)}
                   className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all border border-transparent hover:border-blue-500/20"
-                  title="Expandir imagem"
+                  title="Expandir referência visual"
                 >
                   <ImageIcon size={12} />
-                  <span>Expandir</span>
+                  <span>Referência</span>
                   <ChevronRight size={12} />
                 </button>
               )}
@@ -1118,10 +1112,10 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
             </div>
 
             {/*  MAIN SLIDE CONTENT  */}
-            <div className={`flex-1 min-h-0 ${isImageCollapsed ? 'block overflow-y-auto' : 'grid xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] overflow-y-auto xl:overflow-hidden'}`}>
+            <div ref={mainContentRef} className={`custom-scrollbar flex-1 min-h-0 touch-pan-y overscroll-y-contain ${isImageCollapsed ? 'block overflow-y-auto' : 'grid overflow-y-auto xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden'}`}>
 
               {/* LEFT PANEL: info + checklist */}
-              <div className={`flex flex-col gap-0 min-h-0 ${isImageCollapsed ? '' : 'xl:border-r xl:border-white/5'}`}>
+              <div ref={leftPanelRef} className={`custom-scrollbar block ${isImageCollapsed ? '' : 'xl:h-full xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:border-r xl:border-white/5'}`}>
                 {/* title zone */}
                 <div className="shrink-0 px-4 pt-4 pb-3 border-b border-white/5 sm:px-6 sm:pt-5">
                   <p className="text-[9px] tracking-[0.4em] uppercase text-blue-300 font-bold mb-1">Etapa</p>
@@ -1142,10 +1136,6 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                         fontSize: currentStep.description.length > 150 ? 'clamp(0.75rem, 1.5vw, 0.875rem)' :
                                   currentStep.description.length > 80 ? 'clamp(0.875rem, 2vw, 1rem)' :
                                   'clamp(1rem, 2.5vw, 1.125rem)',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
                       }}
                     >{currentStep.description}</p>
                   )}
@@ -1167,7 +1157,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                       </div>
 
                       {operatorSummary.cards.length > 0 && (
-                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+                        <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
                           {operatorSummary.cards.map((card) => (
                             <div
                               key={card.title}
@@ -1193,7 +1183,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                 </div>
 
                 {/* checklist  scrollable only if too many items */}
-                <div className="flex-1 min-h-[220px] overflow-y-auto px-3 py-3 sm:px-5">
+                <div className="min-h-[220px] px-3 py-3 sm:px-5">
                   {/* criticality legend */}
                   <div className="flex flex-wrap items-center gap-2 mb-3 sm:gap-3">
                     <p className="text-[8px] text-slate-500 uppercase tracking-widest font-bold"> Faça e marque o que já foi concluído:</p>
@@ -1368,8 +1358,8 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                   </AnimatePresence>
                 </div>
 
-                {/* action bar  always at bottom */}
-                <div className="sticky bottom-0 z-20 shrink-0 px-3 py-3 border-t border-white/5 bg-[#060d1a]/95 backdrop-blur-xl sm:px-5">
+                {/* Navigation is the final block in the document flow and never overlays the guide. */}
+                <div className="relative mt-4 px-3 py-4 border-t border-white/5 bg-[#060d1a] sm:px-5">
                   <div className="flex gap-2 items-stretch">
                     <button
                       onClick={handleBack}
@@ -1450,7 +1440,12 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: 100, opacity: 0 }}
                     transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                    className="relative flex min-h-[320px] flex-col bg-[#040910] xl:min-h-0"
+                    className="relative flex min-h-[320px] flex-col bg-[#040910] xl:h-full xl:min-h-0 xl:overflow-hidden"
+                    onWheel={(event) => {
+                      if (window.innerWidth >= 1280 && leftPanelRef.current) {
+                        leftPanelRef.current.scrollBy({ top: event.deltaY });
+                      }
+                    }}
                   >
 
                 {/*  Top toolbar  */}
@@ -1483,13 +1478,15 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                       ><ImageIcon size={11} /> Imagem</button>
                       <button
                         onClick={() => setRefMode('compare')}
+                        disabled={currentStep.images.length < 2}
                         className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
                           refMode === 'compare' ? 'bg-purple-500/20 border border-purple-500/40 text-purple-300' : 'text-slate-500 hover:text-slate-300'
-                        }`}
+                        } disabled:cursor-not-allowed disabled:opacity-30`}
+                        title={currentStep.images.length < 2 ? 'Adicione duas imagens para comparar' : 'Comparar imagens'}
                       ><Layers size={11} /> Comparar</button>
                       <div className="flex-1" />
                       {/* zoom controls */}
-                      <button onClick={() => handleZoom(0.5)} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><ZoomIn size={13} /></button>
+                      <button onClick={() => handleZoom(0.5)} disabled={!currentStep.hasVisualReference} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:cursor-not-allowed disabled:opacity-30"><ZoomIn size={13} /></button>
                       <button onClick={() => handleZoom(-0.5)} disabled={zoom <= 1} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"><ZoomOut size={13} /></button>
                       <button onClick={handleResetZoom} disabled={zoom <= 1} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"><RotateCcw size={13} /></button>
                       <span className="text-[10px] text-slate-500 tabular-nums w-8 text-right">{Math.round(zoom * 100)}%</span>
@@ -1508,60 +1505,78 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
                   >
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={`img-${phaseIndex}-${stepIndex}-${activeImageIdx}`}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="absolute inset-0"
-                        style={{
-                          transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
-                          transformOrigin: 'center center',
-                          transition: isPanning ? 'none' : 'transform 0.2s ease',
-                        }}
-                      >
-                        {(() => {
-                          const src = currentStep.images[activeImageIdx] || currentStep.image;
-                          const isVideo = src.match(/\.(mp4|webm|ogg)$/i);
-                          if (isVideo) return (
-                            <video
-                              src={src}
-                              autoPlay loop muted playsInline
-                              className="absolute inset-0 w-full h-full object-cover"
-                            />
-                          );
-                          return (
-                            <img
-                              src={src}
-                              alt={currentStep.title}
-                              className="absolute inset-0 w-full h-full object-cover"
-                              onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
-                            />
-                          );
-                        })()}
-                      </motion.div>
-                    </AnimatePresence>
+                    {currentStep.hasVisualReference && activeMediaSource && !mediaLoadError ? (
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={`img-${phaseIndex}-${stepIndex}-${activeImageIdx}`}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="absolute inset-0"
+                          style={{
+                            transform: `scale(${zoom}) translate(${panOffset.x / zoom}px, ${panOffset.y / zoom}px)`,
+                            transformOrigin: 'center center',
+                            transition: isPanning ? 'none' : 'transform 0.2s ease',
+                          }}
+                        >
+                          {(() => {
+                            const src = activeMediaSource;
+                            if (isVideoMedia(src)) return (
+                              <video
+                                src={src}
+                                autoPlay loop muted playsInline
+                                onError={() => setMediaLoadError(true)}
+                                className="absolute inset-0 w-full h-full object-cover"
+                              />
+                            );
+                            return (
+                              <img
+                                src={src}
+                                alt={currentStep.title}
+                                onError={() => setMediaLoadError(true)}
+                                className="absolute inset-0 w-full h-full object-contain bg-[#070d18]"
+                              />
+                            );
+                          })()}
+                        </motion.div>
+                      </AnimatePresence>
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.08),transparent_55%)] px-8 text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10">
+                          <ImageIcon size={28} className="text-blue-300" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-200">
+                            {mediaLoadError ? 'Não foi possível carregar a referência visual' : 'Sem referência visual nesta etapa'}
+                          </p>
+                          <p className="mt-1 max-w-sm text-xs leading-relaxed text-slate-500">
+                            {mediaLoadError
+                              ? 'O arquivo pode ter sido removido ou o endereço não está mais disponível. Envie a mídia novamente no modo Técnico.'
+                              : 'A imagem aparecerá aqui quando for adicionada aos detalhes deste nó no modo Técnico.'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     {/* dark overlays */}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#040910] via-transparent to-transparent pointer-events-none" />
                     <div className="absolute inset-0 bg-gradient-to-r from-[#060d1a]/20 to-transparent pointer-events-none" />
 
                     {/* video/gif badge */}
-                    {(currentStep.images[activeImageIdx] || '').match(/\.(mp4|webm|ogg|gif)$/i) && (
+                    {(isVideoMedia(activeMediaSource) || isGifMedia(activeMediaSource)) && !mediaLoadError && (
                       <div className="absolute top-10 left-2 z-10">
                         <span className="flex items-center gap-1 text-[10px] font-bold bg-purple-500/20 border border-purple-500/40 text-purple-300 px-2 py-1 rounded-full backdrop-blur-sm">
-                          <Video size={10} /> {(currentStep.images[activeImageIdx] || '').match(/\.gif$/i) ? 'GIF' : 'Vídeo'}
+                          <Video size={10} /> {isGifMedia(activeMediaSource) ? 'GIF' : 'Vídeo'}
                         </span>
                       </div>
                     )}
 
                     {/* status badges  top-right inside viewer */}
-                    <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
+                    {currentStep.hasVisualReference && <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
                       <span className="flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-full backdrop-blur-sm">✓ OK</span>
                       <span className="flex items-center gap-1 text-[10px] font-bold bg-red-500/20 border border-red-500/40 text-red-300 px-2 py-1 rounded-full backdrop-blur-sm">× NOK</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-full backdrop-blur-sm"> Ateno</span>
-                    </div>
+                      <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-full backdrop-blur-sm">Atenção</span>
+                    </div>}
 
                     {/* image thumbnails strip (if multiple) */}
                     {currentStep.images.length > 1 && (
@@ -1656,7 +1671,9 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                   <div className="shrink-0 px-4 py-2 border-t border-white/5 bg-[#060d1a]/90 z-10">
                     <p className="text-[8px] tracking-[0.3em] uppercase text-amber-300 font-bold mb-0.5">Referência</p>
                     <p className="text-xs font-bold text-white leading-tight">{currentStep.title}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Confira o padrão esperado.</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {currentStep.hasVisualReference ? 'Confira o padrão esperado.' : 'Nenhuma imagem cadastrada para esta etapa.'}
+                    </p>
                     {/* step dots */}
                     <div className="flex gap-1.5 mt-2 flex-wrap">
                       {currentPhase.steps.map((_, i) => (

@@ -19,7 +19,7 @@ import '@xyflow/react/dist/style.css';
 import { emptyMapTemplate } from './data';
 import { getLayoutedElements } from './lib/layout';
 import { MindMapNode } from './components/MindMapNode';
-import { Settings2, Download, Plus, Play, Pause, ChevronRight, ChevronLeft, ChevronDown, Square, Target, ArrowLeft, Search, X, Image as ImageIcon, FileCode, Camera, Save, History, RotateCcw, Trash2, FileText, LogOut, Clock, LayoutGrid, Move, BarChart3, Sparkles, Lock, Unlock, Gauge } from 'lucide-react';
+import { Settings2, Download, Plus, Play, Pause, ChevronRight, ChevronLeft, ChevronDown, Square, Target, ArrowLeft, Search, X, Image as ImageIcon, FileCode, Camera, Save, History, RotateCcw, Trash2, FileText, LogOut, Clock, LayoutGrid, Move, BarChart3, Sparkles, Lock, Unlock, Gauge, Volume2, VolumeX, ShieldCheck, ClipboardCheck, TriangleAlert } from 'lucide-react';
 import type { NodeDetails } from './components/NodeModal';
 import { Node } from '@xyflow/react';
 import confetti from 'canvas-confetti';
@@ -63,6 +63,10 @@ import {
   type OperationalModeName,
   type OperationalViewMode,
 } from './lib/operationalModel';
+import {
+  buildPresentationFrames,
+  type PresentationReadingMode,
+} from './lib/presentationReading';
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })));
 const MarkdownView = lazy(() => import('./components/MarkdownView').then((module) => ({ default: module.MarkdownView })));
@@ -713,6 +717,23 @@ const buildRecoveredMapV2 = (mapTitle: string, detailsMap: Record<string, NodeDe
   return { nodes, edges };
 };
 
+const stableMapSnapshot = (value: unknown): string => {
+  const normalize = (entry: unknown): unknown => {
+    if (Array.isArray(entry)) return entry.map(normalize);
+    if (entry && typeof entry === 'object') {
+      return Object.keys(entry as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((result, key) => {
+          result[key] = normalize((entry as Record<string, unknown>)[key]);
+          return result;
+        }, {});
+    }
+    return entry;
+  };
+
+  return JSON.stringify(normalize(value));
+};
+
 function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, preferences }: { mapId: string, mapTitle: string, onBack: () => void, currentUser: { id: string; name: string; email: string; role: string } | null, assessmentRefreshToken: number, preferences: Preferences }) {
   const { setCenter, fitView, getNodes, getEdges } = useReactFlow();
   
@@ -722,6 +743,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
   const [isMapDirty, setIsMapDirty] = useState(false);
   const [isSavingMap, setIsSavingMap] = useState(false);
+  const persistedMapSnapshotRef = useRef<string>('');
   const [mapDescription, setMapDescription] = useState('');
   const [mapTags, setMapTags] = useState<string[]>([]);
   const [mapVisibility, setMapVisibility] = useState<'public' | 'departments' | 'private'>('public');
@@ -738,9 +760,13 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
   const [presentationPath, setPresentationPath] = useState<string[]>([]);
   const [presentationIndex, setPresentationIndex] = useState(0);
   const [isPresenting, setIsPresenting] = useState(false);
-  const [presentationGuidedMode, setPresentationGuidedMode] = useState(() => (
-    window.localStorage.getItem('tecno-presentation-mode') !== 'traditional'
-  ));
+  const [presentationReadingMode, setPresentationReadingMode] = useState<PresentationReadingMode>(() => {
+    const savedMode = window.localStorage.getItem('tecno-presentation-mode');
+    if (savedMode === 'traditional' || savedMode === 'complete' || savedMode === 'essential') return savedMode;
+    return savedMode === 'guided' ? 'essential' : 'essential';
+  });
+  const presentationGuidedMode = presentationReadingMode !== 'traditional';
+  const [presentationFrameIndex, setPresentationFrameIndex] = useState(0);
   const [presentationAutoPlay, setPresentationAutoPlay] = useState(true);
   const [presentationSpeed, setPresentationSpeed] = useState(() => {
     const savedSpeed = Number(window.localStorage.getItem('tecno-presentation-speed'));
@@ -748,8 +774,19 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
   });
   const [presentationVisibleCharacters, setPresentationVisibleCharacters] = useState(0);
   const [presentationProgress, setPresentationProgress] = useState(0);
+  const [presentationNarrationEnabled, setPresentationNarrationEnabled] = useState(() => (
+    window.localStorage.getItem('tecno-presentation-narration') === 'true'
+  ));
+  const [presentationVoices, setPresentationVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [presentationVoiceName, setPresentationVoiceName] = useState(() => (
+    window.localStorage.getItem('tecno-presentation-voice') || ''
+  ));
   const presentationCollapsedStateRef = useRef<string[]>([]);
   const presentationAdvanceTimerRef = useRef<number | null>(null);
+  const presentationSpeechTimerRef = useRef<number | null>(null);
+  const presentationSpeechFallbackTimerRef = useRef<number | null>(null);
+  const presentationSpeechRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const presentationAutoPlayRef = useRef(presentationAutoPlay);
   const presentationVisibleCharactersRef = useRef(0);
   const presentationNarrativeNodeRef = useRef<string | undefined>(undefined);
   const [viewMode, setViewMode] = useState<OperationalViewMode>('technical');
@@ -846,14 +883,14 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
       );
       onNodesChange(selectionOnlyChanges);
     } else {
-      const changedPosition = changes.some((change: any) => change.type === 'position' || change.type === 'dimensions');
-      if (changedPosition) {
-        setLayoutMode('manual');
-        setIsMapDirty(true);
-      }
       onNodesChange(changes);
     }
   }, [perms.can.editNode, onNodesChange]);
+
+  const handleNodeDragStop = useCallback(() => {
+    setLayoutMode('manual');
+    setIsMapDirty(true);
+  }, []);
 
   const handleEdgesChange = useCallback((changes: any) => {
     if (changes.some((change: any) => change.type !== 'select')) {
@@ -985,6 +1022,14 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
   const parentMap = hierarchyMaps.parents;
 
   const presentationActiveNodeId = isPresenting ? presentationPath[presentationIndex] : undefined;
+  const presentationFrames = useMemo(() => {
+    const node = presentationActiveNodeId
+      ? nodes.find((entry) => entry.id === presentationActiveNodeId)
+      : undefined;
+    const details = presentationActiveNodeId ? nodeDetailsMap[presentationActiveNodeId] : undefined;
+    return buildPresentationFrames(node, details, presentationReadingMode);
+  }, [presentationActiveNodeId, nodes, nodeDetailsMap, presentationReadingMode]);
+  const presentationFrame = presentationFrames[presentationFrameIndex] || presentationFrames[0];
   const presentationContextNodeIds = useMemo(() => {
     const context = new Set<string>();
     if (!presentationActiveNodeId) return context;
@@ -1237,6 +1282,27 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
         node_details: cleanNodeDetails,
       };
 
+      const { data: currentPersistedMap, error: currentPersistedMapError } = await supabase
+        .from('process_items')
+        .select('nodes, edges, node_details')
+        .eq('id', mapId)
+        .single();
+
+      if (currentPersistedMapError) throw currentPersistedMapError;
+
+      const currentPersistedSnapshot = stableMapSnapshot(currentPersistedMap);
+      if (
+        persistedMapSnapshotRef.current
+        && currentPersistedSnapshot !== persistedMapSnapshotRef.current
+      ) {
+        warning(
+          'Mapa atualizado em outra sessão',
+          'O banco recebeu alterações depois que este mapa foi aberto. Reabra o mapa para carregar a versão atual antes de salvar suas mudanças.',
+          10000,
+        );
+        return;
+      }
+
       let saveError: any = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         let error: any = null;
@@ -1271,6 +1337,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
 
       setNodes(cleanNodes as any);
       setEdges(cleanEdges as any);
+      persistedMapSnapshotRef.current = stableMapSnapshot(payload);
       setIsMapDirty(false);
       setLayoutMode('manual');
       success('Mapa salvo', 'As posições, nós e conexões foram salvos no banco.');
@@ -1365,6 +1432,11 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
             : getLayoutedElements(baseGraph.nodes, baseGraph.edges, preferences.defaultMapLayout || 'LR');
           const activeGraphNodes = Array.isArray(resolvedLayout.nodes) ? resolvedLayout.nodes : [];
 
+          persistedMapSnapshotRef.current = stableMapSnapshot({
+            nodes: data.nodes,
+            edges: data.edges,
+            node_details: data.node_details,
+          });
           setNodes(resolvedLayout.nodes);
           setEdges(resolvedLayout.edges);
           if (activeGraphNodes.length > 35) {
@@ -2237,6 +2309,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
     setCollapsedNodeIds([]);
     setPresentationPath(path);
     setPresentationIndex(0);
+    setPresentationFrameIndex(0);
     setPresentationAutoPlay(presentationGuidedMode);
     setPresentationVisibleCharacters(0);
     setPresentationProgress(0);
@@ -2251,6 +2324,16 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
       window.clearTimeout(presentationAdvanceTimerRef.current);
       presentationAdvanceTimerRef.current = null;
     }
+    if (presentationSpeechTimerRef.current) {
+      window.clearTimeout(presentationSpeechTimerRef.current);
+      presentationSpeechTimerRef.current = null;
+    }
+    if (presentationSpeechFallbackTimerRef.current) {
+      window.clearInterval(presentationSpeechFallbackTimerRef.current);
+      presentationSpeechFallbackTimerRef.current = null;
+    }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    presentationSpeechRef.current = null;
     setIsPresenting(false);
     setHoveredNode(null);
     setHoverPosition(null);
@@ -2258,7 +2341,11 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
     window.setTimeout(() => fitView({ duration: 800, padding: 0.2 }), 40);
     
     // trigger confetti if they reached the end
-    if (presentationIndex === presentationPath.length - 1 && presentationPath.length > 0) {
+    if (
+      presentationIndex === presentationPath.length - 1
+      && presentationPath.length > 0
+      && presentationFrameIndex >= Math.max(0, presentationFrames.length - 1)
+    ) {
       confetti({
         particleCount: 150,
         spread: 90,
@@ -2267,27 +2354,46 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
         disableForReducedMotion: true
       });
     }
-  }, [fitView, presentationIndex, presentationPath.length]);
+  }, [fitView, presentationIndex, presentationPath.length, presentationFrameIndex, presentationFrames.length]);
 
   const nextSlide = useCallback(() => {
+    if (presentationGuidedMode && presentationFrameIndex < presentationFrames.length - 1) {
+      setPresentationFrameIndex((current) => current + 1);
+      return;
+    }
     if (presentationIndex < presentationPath.length - 1) {
-      setPresentationIndex(prev => prev + 1);
+      setPresentationFrameIndex(0);
+      setPresentationIndex((current) => current + 1);
     } else {
       stopPresentation();
     }
-  }, [presentationIndex, presentationPath.length, stopPresentation]);
+  }, [presentationGuidedMode, presentationFrameIndex, presentationFrames.length, presentationIndex, presentationPath.length, stopPresentation]);
 
   const prevSlide = useCallback(() => {
-    if (presentationIndex > 0) {
-      setPresentationIndex(prev => prev - 1);
+    if (presentationGuidedMode && presentationFrameIndex > 0) {
+      setPresentationFrameIndex((current) => current - 1);
+      return;
     }
-  }, [presentationIndex]);
+    if (presentationIndex > 0) {
+      const previousIndex = presentationIndex - 1;
+      const previousNodeId = presentationPath[previousIndex];
+      const previousNode = nodes.find((node) => node.id === previousNodeId);
+      const previousFrames = buildPresentationFrames(
+        previousNode,
+        nodeDetailsMap[previousNodeId],
+        presentationReadingMode,
+      );
+      setPresentationFrameIndex(Math.max(0, previousFrames.length - 1));
+      setPresentationIndex(previousIndex);
+    }
+  }, [presentationGuidedMode, presentationFrameIndex, presentationIndex, presentationPath, nodes, nodeDetailsMap, presentationReadingMode]);
 
   const presentationNarrative = useMemo(() => {
-    if (!presentationActiveNodeId) {
+    if (!presentationActiveNodeId || !presentationFrame) {
       return {
         node: undefined,
         details: undefined,
+        frame: undefined,
         description: '',
         tasks: [] as any[],
         segments: [] as Array<{ key: string; text: string }>,
@@ -2298,11 +2404,14 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
 
     const node = nodes.find((entry) => entry.id === presentationActiveNodeId);
     const details = nodeDetailsMap[presentationActiveNodeId];
-    const description = String(details?.description || 'Observe esta etapa e siga as orientações apresentadas no processo.').trim();
-    const tasks = Array.isArray(details?.tasks) ? details.tasks.filter((task) => task?.text) : [];
+    const description = presentationFrame.description;
+    const tasks = presentationFrame.items.map((text, index) => ({
+      id: `${presentationFrame.id}:item-${index}`,
+      text,
+    }));
     const segments = [
       { key: 'description', text: description },
-      ...tasks.slice(0, 4).map((task, index) => ({
+      ...tasks.map((task, index) => ({
         key: String(task.id || `task-${index}`),
         text: String(task.text),
       })),
@@ -2312,13 +2421,14 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
     return {
       node,
       details,
+      frame: presentationFrame,
       description,
       tasks,
       segments,
       characters: Array.from(narrativeText),
       text: narrativeText,
     };
-  }, [presentationActiveNodeId, nodes, nodeDetailsMap]);
+  }, [presentationActiveNodeId, presentationFrame, nodes, nodeDetailsMap]);
 
   const presentationVisibleDescription = useMemo(() => {
     const characters = Array.from(presentationNarrative.description);
@@ -2329,7 +2439,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
     const descriptionLength = Array.from(presentationNarrative.description).length;
     let remainingCharacters = Math.max(0, presentationVisibleCharacters - descriptionLength - 1);
 
-    return presentationNarrative.tasks.slice(0, 4).map((task) => {
+    return presentationNarrative.tasks.map((task) => {
       const taskCharacters = Array.from(String(task.text || ''));
       const visibleText = taskCharacters.slice(0, remainingCharacters).join('');
       remainingCharacters = Math.max(0, remainingCharacters - taskCharacters.length - 1);
@@ -2348,10 +2458,13 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
       window.clearTimeout(presentationAdvanceTimerRef.current);
       presentationAdvanceTimerRef.current = null;
     }
-  }, [isPresenting, presentationActiveNodeId]);
+  }, [isPresenting, presentationActiveNodeId, presentationFrame?.id]);
 
   useEffect(() => {
     if (!isPresenting || !presentationGuidedMode || !presentationAutoPlay) return;
+    // With narration enabled, speech boundary events control the reveal so the
+    // independent typewriter cannot run ahead of or behind the spoken words.
+    if (presentationNarrationEnabled) return;
 
     const totalCharacters = Math.max(1, presentationNarrative.characters.length);
     const initialVisibleCharacters = presentationNarrativeNodeRef.current === presentationActiveNodeId
@@ -2400,7 +2513,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
 
     presentationAdvanceTimerRef.current = window.setTimeout(() => {
       setPresentationProgress(100);
-      nextSlide();
+      if (!presentationFrame?.requiresConfirmation) nextSlide();
     }, totalDuration);
 
     return () => {
@@ -2410,30 +2523,161 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
         presentationAdvanceTimerRef.current = null;
       }
     };
-  }, [isPresenting, presentationGuidedMode, presentationAutoPlay, presentationActiveNodeId, presentationSpeed, presentationNarrative.characters, nextSlide]);
+  }, [isPresenting, presentationGuidedMode, presentationAutoPlay, presentationActiveNodeId, presentationFrame?.id, presentationFrame?.requiresConfirmation, presentationSpeed, presentationNarrative.characters, presentationNarrationEnabled, nextSlide]);
 
   useEffect(() => {
     window.localStorage.setItem('tecno-presentation-speed', String(presentationSpeed));
   }, [presentationSpeed]);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      'tecno-presentation-mode',
-      presentationGuidedMode ? 'guided' : 'traditional',
-    );
-  }, [presentationGuidedMode]);
+    window.localStorage.setItem('tecno-presentation-mode', presentationReadingMode);
+  }, [presentationReadingMode]);
 
-  const togglePresentationGuidedMode = useCallback(() => {
-    setPresentationGuidedMode((guidedMode) => {
-      const nextGuidedMode = !guidedMode;
-      setPresentationAutoPlay(nextGuidedMode);
-      presentationVisibleCharactersRef.current = nextGuidedMode
-        ? 0
-        : presentationNarrative.characters.length;
-      setPresentationVisibleCharacters(presentationVisibleCharactersRef.current);
-      setPresentationProgress(nextGuidedMode ? 0 : 100);
-      return nextGuidedMode;
-    });
+  useEffect(() => {
+    window.localStorage.setItem('tecno-presentation-narration', String(presentationNarrationEnabled));
+  }, [presentationNarrationEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem('tecno-presentation-voice', presentationVoiceName);
+  }, [presentationVoiceName]);
+
+  useEffect(() => {
+    presentationAutoPlayRef.current = presentationAutoPlay;
+    if (!presentationNarrationEnabled || !('speechSynthesis' in window)) return;
+    if (presentationAutoPlay) window.speechSynthesis.resume();
+    else window.speechSynthesis.pause();
+  }, [presentationAutoPlay, presentationNarrationEnabled]);
+
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setPresentationVoices(voices);
+      if (!presentationVoiceName) {
+        const preferred = voices.find((voice) => voice.lang.toLocaleLowerCase().startsWith('pt-br'))
+          || voices.find((voice) => voice.lang.toLocaleLowerCase().startsWith('pt'));
+        if (preferred) setPresentationVoiceName(preferred.name);
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+  }, [presentationVoiceName]);
+
+  useEffect(() => {
+    if (
+      !isPresenting
+      || !presentationGuidedMode
+      || !presentationNarrationEnabled
+      || !presentationFrame
+      || !('speechSynthesis' in window)
+    ) return;
+
+    const narrativeText = presentationNarrative.text.trim();
+    const spokenPrefix = `${presentationFrame.title}. `;
+    const speechText = `${spokenPrefix}${narrativeText}`.trim();
+    if (!speechText || !narrativeText) return;
+
+    window.speechSynthesis.cancel();
+    if (presentationSpeechTimerRef.current) window.clearTimeout(presentationSpeechTimerRef.current);
+    if (presentationSpeechFallbackTimerRef.current) window.clearInterval(presentationSpeechFallbackTimerRef.current);
+
+    const utterance = new SpeechSynthesisUtterance(speechText);
+    utterance.lang = 'pt-BR';
+    utterance.rate = Math.min(1.35, Math.max(0.65, 0.62 + presentationSpeed * 0.42));
+    const selectedVoice = presentationVoices.find((voice) => voice.name === presentationVoiceName)
+      || presentationVoices.find((voice) => voice.lang.toLocaleLowerCase().startsWith('pt-br'))
+      || presentationVoices.find((voice) => voice.lang.toLocaleLowerCase().startsWith('pt'));
+    if (selectedVoice) utterance.voice = selectedVoice;
+
+    let lastBoundaryAt = performance.now();
+    let fallbackVisibleCharacters = 0;
+    let receivedBoundary = false;
+    const totalNarrativeCharacters = presentationNarrative.characters.length;
+
+    const revealThroughSpeechIndex = (speechCharacterIndex: number) => {
+      const narrativeCodeUnitIndex = Math.max(0, speechCharacterIndex - spokenPrefix.length);
+      const visibleCharacters = Math.min(
+        totalNarrativeCharacters,
+        Array.from(narrativeText.slice(0, narrativeCodeUnitIndex)).length,
+      );
+      fallbackVisibleCharacters = Math.max(fallbackVisibleCharacters, visibleCharacters);
+      presentationVisibleCharactersRef.current = fallbackVisibleCharacters;
+      setPresentationVisibleCharacters(fallbackVisibleCharacters);
+      setPresentationProgress(Math.min(94, (fallbackVisibleCharacters / Math.max(1, totalNarrativeCharacters)) * 94));
+    };
+
+    utterance.onboundary = (event) => {
+      if (event.name && event.name !== 'word' && event.name !== 'sentence') return;
+      receivedBoundary = true;
+      lastBoundaryAt = performance.now();
+      const sourceAfterBoundary = speechText.slice(event.charIndex);
+      const detectedWordLength = sourceAfterBoundary.match(/^\S+/)?.[0]?.length || 1;
+      revealThroughSpeechIndex(event.charIndex + Math.max(event.charLength || 0, detectedWordLength));
+    };
+
+    // Some voices do not provide word boundaries. In that case, use a conservative
+    // fallback and immediately yield when reliable speech events resume.
+    const estimatedCharactersPerSecond = 10.5 * utterance.rate;
+    const fallbackStartedAt = performance.now();
+    presentationSpeechFallbackTimerRef.current = window.setInterval(() => {
+      if (!presentationAutoPlayRef.current) return;
+      const now = performance.now();
+      if (receivedBoundary && now - lastBoundaryAt < 1100) return;
+      const estimatedSpeechIndex = Math.floor(((now - fallbackStartedAt) / 1000) * estimatedCharactersPerSecond);
+      revealThroughSpeechIndex(estimatedSpeechIndex);
+    }, 100);
+
+    utterance.onend = () => {
+      if (presentationSpeechFallbackTimerRef.current) {
+        window.clearInterval(presentationSpeechFallbackTimerRef.current);
+        presentationSpeechFallbackTimerRef.current = null;
+      }
+      presentationVisibleCharactersRef.current = presentationNarrative.characters.length;
+      setPresentationVisibleCharacters(presentationNarrative.characters.length);
+      setPresentationProgress(100);
+      if (presentationFrame.requiresConfirmation || !presentationAutoPlayRef.current) return;
+      presentationSpeechTimerRef.current = window.setTimeout(nextSlide, 850);
+    };
+    utterance.onerror = (event) => {
+      if (event.error !== 'canceled' && event.error !== 'interrupted') {
+        setPresentationNarrationEnabled(false);
+      }
+    };
+
+    presentationSpeechRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+    if (!presentationAutoPlayRef.current) window.speechSynthesis.pause();
+
+    return () => {
+      utterance.onend = null;
+      utterance.onerror = null;
+      utterance.onboundary = null;
+      if (presentationSpeechTimerRef.current) {
+        window.clearTimeout(presentationSpeechTimerRef.current);
+        presentationSpeechTimerRef.current = null;
+      }
+      if (presentationSpeechFallbackTimerRef.current) {
+        window.clearInterval(presentationSpeechFallbackTimerRef.current);
+        presentationSpeechFallbackTimerRef.current = null;
+      }
+      window.speechSynthesis.cancel();
+      presentationSpeechRef.current = null;
+    };
+  }, [isPresenting, presentationGuidedMode, presentationNarrationEnabled, presentationFrame?.id, presentationSpeed, presentationVoices, presentationVoiceName, presentationNarrative.characters.length, presentationNarrative.text, nextSlide]);
+
+  const handlePresentationReadingModeChange = useCallback((mode: PresentationReadingMode) => {
+    setPresentationReadingMode(mode);
+    setPresentationFrameIndex(0);
+    const guided = mode !== 'traditional';
+    setPresentationAutoPlay(guided);
+    presentationVisibleCharactersRef.current = guided ? 0 : presentationNarrative.characters.length;
+    setPresentationVisibleCharacters(presentationVisibleCharactersRef.current);
+    setPresentationProgress(guided ? 0 : 100);
+    if (!guided) {
+      setPresentationNarrationEnabled(false);
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    }
   }, [presentationNarrative.characters.length]);
 
   useEffect(() => {
@@ -2670,35 +2914,43 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                       </div>
                     </>
                   ) : (
-                    <div className="hidden sm:flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('technical')}
+                      className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-2.5 py-2 transition-colors hover:border-blue-400/30 hover:bg-blue-500/10 sm:px-3"
+                      title="Voltar ao modo Técnico"
+                      aria-label={`Sair do modo ${currentViewMeta.label} e voltar ao modo Técnico`}
+                    >
                       <span className="text-[10px] uppercase tracking-widest text-blue-300 font-bold whitespace-nowrap">{currentViewMeta.label}</span>
-                    </div>
+                    </button>
                   )}
                 </div>
               </div>
 
-              <div className="mobile-tab-scroll relative -mx-3 flex w-[calc(100%+1.5rem)] snap-x snap-mandatory justify-start overflow-x-auto px-3 pb-1 sm:mx-0 sm:w-full sm:px-0 2xl:justify-center custom-scrollbar">
-                <div className="flex min-w-max items-center gap-1 rounded-2xl border border-white/10 bg-[#0a1628] p-1 shadow-xl">
-                  {OPERATIONAL_VIEW_OPTIONS.map((option) => {
-                    const isActive = viewMode === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        onClick={() => setViewMode(option.value)}
-                        className={cn(
-                          'snap-start px-3 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap border',
-                          isActive ?
-                             'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/40 text-white shadow-[0_0_16px_rgba(59,130,246,0.35)]'
-                            : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5',
-                        )}
-                        title={option.description}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
+              {viewMode !== 'operator' && (
+                <div className="mobile-tab-scroll relative -mx-3 flex w-[calc(100%+1.5rem)] snap-x snap-mandatory justify-start overflow-x-auto px-3 pb-1 sm:mx-0 sm:w-full sm:px-0 2xl:justify-center custom-scrollbar">
+                  <div className="flex min-w-max items-center gap-1 rounded-2xl border border-white/10 bg-[#0a1628] p-1 shadow-xl">
+                    {OPERATIONAL_VIEW_OPTIONS.map((option) => {
+                      const isActive = viewMode === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          onClick={() => setViewMode(option.value)}
+                          className={cn(
+                            'snap-start px-3 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap border',
+                            isActive ?
+                               'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/40 text-white shadow-[0_0_16px_rgba(59,130,246,0.35)]'
+                              : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5',
+                          )}
+                          title={option.description}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -2709,6 +2961,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
               nodes={visibleNodes}
               edges={visibleEdges}
               onNodesChange={handleNodesChange}
+              onNodeDragStop={handleNodeDragStop}
               onEdgesChange={handleEdgesChange}
               onConnect={onConnect}
               nodeTypes={nodeTypes}
@@ -2761,28 +3014,56 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                 <Panel position="top-left" className="m-3 max-w-[calc(100vw-1.5rem)] sm:m-6">
                   <AnimatePresence mode="wait">
                     <motion.div
-                      key={presentationActiveNodeId}
+                      key={presentationFrame?.id || presentationActiveNodeId}
                       initial={{ opacity: 0, x: -24, scale: 0.97 }}
                       animate={{ opacity: 1, x: 0, scale: 1 }}
                       exit={{ opacity: 0, x: 20, scale: 0.98 }}
                       transition={{ duration: 0.38, ease: 'easeOut' }}
-                      className="relative w-[min(430px,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-blue-400/20 bg-[#090f1d]/90 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+                      className={cn(
+                        'relative overflow-hidden rounded-3xl border bg-[#090f1d]/94 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl',
+                        presentationFrame?.media.length
+                          ? 'w-[min(760px,calc(100vw-1.5rem))]'
+                          : 'w-[min(500px,calc(100vw-1.5rem))]',
+                        presentationFrame?.tone === 'ok' && 'border-emerald-400/35',
+                        presentationFrame?.tone === 'nok' && 'border-rose-400/40',
+                        presentationFrame?.tone === 'approval' && 'border-amber-400/35',
+                        presentationFrame?.tone === 'record' && 'border-violet-400/30',
+                        (!presentationFrame || ['neutral', 'instruction', 'visual'].includes(presentationFrame.tone)) && 'border-blue-400/20',
+                      )}
                     >
                       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400 to-transparent" />
-                      <div className="p-5 sm:p-6">
+                      <div className="max-h-[calc(100vh-10rem)] overflow-y-auto p-5 sm:p-6">
                         <div className="flex items-start gap-3">
-                          <div className="rounded-2xl bg-blue-500/15 p-3 text-blue-300 ring-1 ring-blue-400/20">
-                            <Target size={22} />
+                          <div className={cn(
+                            'rounded-2xl p-3 ring-1',
+                            presentationFrame?.tone === 'ok' && 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/25',
+                            presentationFrame?.tone === 'nok' && 'bg-rose-500/15 text-rose-300 ring-rose-400/25',
+                            presentationFrame?.tone === 'approval' && 'bg-amber-500/15 text-amber-300 ring-amber-400/25',
+                            presentationFrame?.tone === 'record' && 'bg-violet-500/15 text-violet-300 ring-violet-400/25',
+                            (!presentationFrame || ['neutral', 'instruction', 'visual'].includes(presentationFrame.tone)) && 'bg-blue-500/15 text-blue-300 ring-blue-400/20',
+                          )}>
+                            {presentationFrame?.tone === 'ok' ? <ShieldCheck size={22} />
+                              : presentationFrame?.tone === 'nok' ? <TriangleAlert size={22} />
+                                : presentationFrame?.tone === 'record' ? <ClipboardCheck size={22} />
+                                  : presentationFrame?.tone === 'visual' ? <ImageIcon size={22} />
+                                    : <Target size={22} />}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-400">
-                              Leitura guiada
+                            <p className={cn(
+                              'text-[10px] font-bold uppercase tracking-[0.22em]',
+                              presentationFrame?.tone === 'ok' && 'text-emerald-400',
+                              presentationFrame?.tone === 'nok' && 'text-rose-400',
+                              presentationFrame?.tone === 'approval' && 'text-amber-400',
+                              presentationFrame?.tone === 'record' && 'text-violet-400',
+                              (!presentationFrame || ['neutral', 'instruction', 'visual'].includes(presentationFrame.tone)) && 'text-blue-400',
+                            )}>
+                              {presentationFrame?.eyebrow || 'Leitura guiada'}
                             </p>
                             <h2 className="mt-1 text-lg font-bold leading-tight text-white sm:text-xl">
-                              {String((presentationNarrative.node?.data as any)?.label || 'Etapa do processo')}
+                              {presentationFrame?.title || String((presentationNarrative.node?.data as any)?.label || 'Etapa do processo')}
                             </h2>
                             <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                              {String((presentationNarrative.node?.data as any)?.category || 'processo')}
+                              {String((presentationNarrative.node?.data as any)?.label || 'Etapa do processo')}
                             </p>
                           </div>
                           <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-slate-400">
@@ -2790,34 +3071,66 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                           </span>
                         </div>
 
-                        <div className="mt-5 min-h-[76px] text-[15px] leading-7 text-slate-200 sm:text-base">
-                          {presentationVisibleDescription}
-                          {presentationVisibleCharacters < presentationNarrative.characters.length && presentationAutoPlay && (
-                            <motion.span
-                              aria-hidden="true"
-                              animate={{ opacity: [0.25, 1, 0.25], scaleY: [0.88, 1, 0.88] }}
-                              transition={{ duration: 0.72, repeat: Infinity, ease: 'easeInOut' }}
-                              className="ml-0.5 inline-block h-5 w-[2px] origin-center translate-y-1 rounded-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.8)]"
-                            />
+                        <div className={cn('mt-5 grid gap-5', presentationFrame?.media.length && 'md:grid-cols-[1fr_240px]')}>
+                          <div className="min-w-0">
+                            <div className="min-h-[76px] text-[15px] leading-7 text-slate-200 sm:text-base">
+                              {presentationVisibleDescription}
+                              {presentationVisibleCharacters < presentationNarrative.characters.length && presentationAutoPlay && (
+                                <motion.span
+                                  aria-hidden="true"
+                                  animate={{ opacity: [0.25, 1, 0.25], scaleY: [0.88, 1, 0.88] }}
+                                  transition={{ duration: 0.72, repeat: Infinity, ease: 'easeInOut' }}
+                                  className="ml-0.5 inline-block h-5 w-[2px] origin-center translate-y-1 rounded-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.8)]"
+                                />
+                              )}
+                            </div>
+
+                            {presentationVisibleTasks.some((task) => task.isVisible) && (
+                              <div className="mt-5 border-t border-white/10 pt-4">
+                                <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Pontos desta tela</p>
+                                <div className="space-y-2.5">
+                                  {presentationVisibleTasks.filter((task) => task.isVisible).map((task) => (
+                                    <motion.div
+                                      key={task.id || task.text}
+                                      initial={{ opacity: 0, y: 6 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      className="flex items-start gap-2.5 text-sm leading-5 text-slate-300"
+                                    >
+                                      <span className={cn(
+                                        'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                                        presentationFrame?.tone === 'nok' ? 'bg-rose-400 shadow-[0_0_12px_rgba(251,113,133,0.8)]' : 'bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]',
+                                      )} />
+                                      <span>{task.visibleText}</span>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {presentationFrame?.media[0] && (
+                            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                              {/\.(mp4|webm|ogg)(?:$|[?#])/i.test(presentationFrame.media[0]) ? (
+                                <video
+                                  src={presentationFrame.media[0]}
+                                  controls
+                                  className="aspect-video h-full max-h-[260px] w-full object-contain"
+                                />
+                              ) : (
+                                <img
+                                  src={presentationFrame.media[0]}
+                                  alt={`Referência visual de ${presentationFrame.title}`}
+                                  className="aspect-video h-full max-h-[260px] w-full object-contain"
+                                />
+                              )}
+                            </div>
                           )}
                         </div>
 
-                        {presentationVisibleTasks.some((task) => task.isVisible) && (
-                          <div className="mt-5 border-t border-white/10 pt-4">
-                            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Ações da etapa</p>
-                            <div className="space-y-2.5">
-                              {presentationVisibleTasks.filter((task) => task.isVisible).map((task) => (
-                                <motion.div
-                                  key={task.id || task.text}
-                                  initial={{ opacity: 0, y: 6 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="flex items-start gap-2.5 text-sm leading-5 text-slate-300"
-                                >
-                                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]" />
-                                  <span>{task.visibleText}</span>
-                                </motion.div>
-                              ))}
-                            </div>
+                        {presentationFrame?.requiresConfirmation && presentationProgress >= 100 && (
+                          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                            <Lock size={17} className="shrink-0" />
+                            <span>Revise esta condição e avance manualmente.</span>
                           </div>
                         )}
                       </div>
@@ -2835,10 +3148,13 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
               )}
               {isPresenting && (
                 <Panel position="bottom-center" className="mb-3 sm:mb-6 max-w-[calc(100vw-1rem)]">
-                  <div className="flex max-w-[min(1080px,calc(100vw-1rem))] items-center gap-2 rounded-2xl border border-white/10 bg-[#0f172a]/94 px-3 py-2.5 shadow-2xl backdrop-blur-2xl sm:gap-4 sm:px-5 sm:py-3">
+                  <div className="flex max-w-[min(1240px,calc(100vw-1rem))] items-center gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-[#0f172a]/94 px-3 py-2.5 shadow-2xl backdrop-blur-2xl sm:gap-4 sm:px-5 sm:py-3">
                     <div className="min-w-0 flex-1">
                       <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300 sm:text-xs">
                         Etapa {presentationIndex + 1} de {presentationPath.length}
+                        {presentationGuidedMode && presentationFrames.length > 1
+                          ? ` · Quadro ${presentationFrameIndex + 1} de ${presentationFrames.length}`
+                          : ''}
                       </span>
                       <span className="mt-0.5 hidden max-w-[420px] truncate text-sm font-semibold text-slate-100 sm:block">
                         {(() => {
@@ -2851,24 +3167,25 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                     </div>
                     
                     <div className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-2 sm:gap-2 sm:pl-4">
-                      <button
-                        type="button"
-                        onClick={togglePresentationGuidedMode}
-                        className={cn(
-                          'flex items-center gap-2 rounded-xl border p-2 text-xs font-bold transition-all lg:px-3',
-                          presentationGuidedMode
-                            ? 'border-blue-400/30 bg-blue-500/15 text-blue-200'
-                            : 'border-amber-400/25 bg-amber-500/10 text-amber-200',
-                        )}
-                        title={presentationGuidedMode
-                          ? 'Desativar leitura guiada e navegar manualmente'
-                          : 'Ativar leitura guiada com avanço automático'}
-                      >
+                      <label className={cn(
+                        'flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs transition-all',
+                        presentationGuidedMode
+                          ? 'border-blue-400/30 bg-blue-500/15 text-blue-200'
+                          : 'border-white/10 bg-white/5 text-slate-300',
+                      )}>
                         {presentationGuidedMode ? <Sparkles size={15} /> : <Move size={15} />}
-                        <span className="hidden md:inline">
-                          {presentationGuidedMode ? 'Leitura guiada' : 'Tradicional'}
-                        </span>
-                      </button>
+                        <span className="sr-only">Modo de leitura</span>
+                        <select
+                          value={presentationReadingMode}
+                          onChange={(event) => handlePresentationReadingModeChange(event.target.value as PresentationReadingMode)}
+                          className="max-w-[105px] cursor-pointer bg-transparent font-bold text-inherit outline-none [&>option]:bg-slate-900"
+                          title="Escolha quanto conteúdo será apresentado"
+                        >
+                          <option value="traditional">Tradicional</option>
+                          <option value="essential">Essencial</option>
+                          <option value="complete">Completa</option>
+                        </select>
+                      </label>
 
                       {presentationGuidedMode && (
                         <>
@@ -2886,6 +3203,38 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                             {presentationAutoPlay ? <Pause size={15} /> : <Play size={15} />}
                             <span className="hidden xl:inline">{presentationAutoPlay ? 'Pausar' : 'Continuar'}</span>
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setPresentationNarrationEnabled((enabled) => !enabled)}
+                            disabled={typeof window === 'undefined' || !('speechSynthesis' in window)}
+                            className={cn(
+                              'flex items-center gap-2 rounded-xl border p-2 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-40 lg:px-3',
+                              presentationNarrationEnabled
+                                ? 'border-cyan-400/30 bg-cyan-500/12 text-cyan-200'
+                                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10',
+                            )}
+                            title={presentationNarrationEnabled ? 'Desativar narração' : 'Ativar narração em português'}
+                          >
+                            {presentationNarrationEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                            <span className="hidden xl:inline">Voz</span>
+                          </button>
+                          {presentationNarrationEnabled && presentationVoices.length > 0 && (
+                            <label className="hidden items-center rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-400 2xl:flex">
+                              <span className="sr-only">Voz da narração</span>
+                              <select
+                                value={presentationVoiceName}
+                                onChange={(event) => setPresentationVoiceName(event.target.value)}
+                                className="max-w-[145px] cursor-pointer truncate bg-transparent font-semibold text-slate-200 outline-none [&>option]:bg-slate-900"
+                                title="Voz da narração"
+                              >
+                                {presentationVoices.map((voice) => (
+                                  <option key={`${voice.name}-${voice.lang}`} value={voice.name}>
+                                    {voice.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
                           <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-400">
                             <Gauge size={14} className="text-blue-300" />
                             <span className="sr-only">Velocidade da apresentação</span>
@@ -2911,19 +3260,26 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                     <div className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-2 sm:gap-2 sm:pl-4">
                       <button 
                         onClick={prevSlide}
-                        disabled={presentationIndex === 0}
+                        disabled={presentationIndex === 0 && presentationFrameIndex === 0}
                         className="rounded-full p-2 text-slate-300 transition-all hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-                        title="Etapa anterior (seta para a esquerda)"
+                        title="Quadro ou etapa anterior (seta para a esquerda)"
                       >
                         <ChevronLeft size={22} />
                       </button>
                       <button 
                         onClick={nextSlide}
                         className="flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500 sm:px-6"
-                        title="Próxima etapa (seta para a direita ou Enter)"
+                        title="Próximo quadro ou etapa (seta para a direita ou Enter)"
                       >
-                        {presentationIndex === presentationPath.length - 1 ? 'Concluir' : 'Próximo'}
-                        {presentationIndex !== presentationPath.length - 1 && <ChevronRight size={18} />}
+                        {presentationIndex === presentationPath.length - 1
+                          && (!presentationGuidedMode || presentationFrameIndex >= presentationFrames.length - 1)
+                          ? 'Concluir'
+                          : presentationFrame?.requiresConfirmation && presentationProgress >= 100
+                            ? 'Confirmar'
+                            : 'Próximo'}
+                        {!(presentationIndex === presentationPath.length - 1
+                          && (!presentationGuidedMode || presentationFrameIndex >= presentationFrames.length - 1))
+                          && <ChevronRight size={18} />}
                       </button>
                     </div>
                     

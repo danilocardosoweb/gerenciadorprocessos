@@ -36,7 +36,15 @@ export interface ReactionPlan {
   containmentActions: string[];
   escalationActions: string[];
   stopProductionCriteria: string[];
+  restartCriteria: string[];
   owner: string;
+}
+
+export interface PendingOperationalValidation {
+  issue: string;
+  reason: string;
+  suggestedValidator: string;
+  impact: string;
 }
 
 export interface TroubleshootingGuide {
@@ -71,8 +79,15 @@ export interface OperationalNodeMetadata {
   evidenceExamples: string[];
   lessonsLearned: string[];
   approvalCriteria: string[];
+  approvalAuthority: string[];
+  okCriteria: string[];
+  nokCriteria: string[];
   okFlow: string[];
   nokFlow: string[];
+  restartCriteria: string[];
+  responsibleRoles: string[];
+  supportRoles: string[];
+  pendingValidation: PendingOperationalValidation[];
 }
 
 export interface AdvancedNodeTypeMeta {
@@ -463,6 +478,7 @@ export function createDefaultOperationalMetadata(
       containmentActions: reactionPlan.containmentActions || [],
       escalationActions: reactionPlan.escalationActions || [],
       stopProductionCriteria: reactionPlan.stopProductionCriteria || [],
+      restartCriteria: reactionPlan.restartCriteria || [],
       owner: reactionPlan.owner || '',
     },
     troubleshooting: {
@@ -487,8 +503,15 @@ export function createDefaultOperationalMetadata(
     evidenceExamples: overrides.evidenceExamples || [],
     lessonsLearned: overrides.lessonsLearned || [],
     approvalCriteria: overrides.approvalCriteria || [],
+    approvalAuthority: overrides.approvalAuthority || [],
+    okCriteria: overrides.okCriteria || [],
+    nokCriteria: overrides.nokCriteria || [],
     okFlow: overrides.okFlow || [],
     nokFlow: overrides.nokFlow || [],
+    restartCriteria: overrides.restartCriteria || [],
+    responsibleRoles: overrides.responsibleRoles || [],
+    supportRoles: overrides.supportRoles || [],
+    pendingValidation: overrides.pendingValidation || [],
   };
 }
 
@@ -533,14 +556,28 @@ export function normalizeOperationalMetadata(
     evidenceExamples: toArray(source.evidenceExamples ?? source.evidenceList),
     lessonsLearned: toArray(source.lessonsLearned),
     approvalCriteria: toArray(source.approvalCriteria),
+    approvalAuthority: toArray(source.approvalAuthority),
+    okCriteria: toArray(source.okCriteria),
+    nokCriteria: toArray(source.nokCriteria),
     okFlow: toArray(source.okFlow),
     nokFlow: toArray(source.nokFlow),
+    restartCriteria: toArray(source.restartCriteria),
+    responsibleRoles: toArray(source.responsibleRoles),
+    supportRoles: toArray(source.supportRoles),
+    pendingValidation: Array.isArray(source.pendingValidation)
+      ? source.pendingValidation.filter((item): item is PendingOperationalValidation => (
+          Boolean(item)
+          && typeof item === 'object'
+          && typeof (item as PendingOperationalValidation).issue === 'string'
+        ))
+      : [],
     reactionPlan: {
       trigger: toText(reactionPlan.trigger, source.reactionPlanTrigger),
       actions: toArray(reactionPlan.actions),
       containmentActions: toArray(reactionPlan.containmentActions),
       escalationActions: toArray(reactionPlan.escalationActions),
       stopProductionCriteria: toArray(reactionPlan.stopProductionCriteria),
+      restartCriteria: toArray(reactionPlan.restartCriteria ?? source.restartCriteria),
       owner: toText(reactionPlan.owner, source.escalationOwner),
     },
     troubleshooting: {

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, FileText, Loader2, Settings2, ShieldCheck, X } from 'lucide-react';
+import { CheckCircle2, Download, FileText, LayoutTemplate, Loader2, Settings2, ShieldCheck, X } from 'lucide-react';
 import { downloadBlob, generateWordDocument, wordFilename } from '../lib/wordDocument';
+import { generateOperatorGuideDocument, operatorGuideFilename } from '../lib/wordOperatorGuide';
 
 interface WorkInstructionExportProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ export function WorkInstructionExport({
   const [includeTasks, setIncludeTasks] = useState(true);
   const [includeRecords, setIncludeRecords] = useState(true);
   const [includeTroubleshooting, setIncludeTroubleshooting] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingFormat, setGeneratingFormat] = useState<'official' | 'visual' | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -72,7 +73,7 @@ export function WorkInstructionExport({
 
   const handleGenerateWord = async () => {
     setErrorMessage('');
-    setIsGenerating(true);
+    setGeneratingFormat('official');
     try {
       const blob = await generateWordDocument({
         mapTitle,
@@ -96,7 +97,37 @@ export function WorkInstructionExport({
       console.error('Error generating Word document:', error);
       setErrorMessage(error instanceof Error ? error.message : 'Não foi possível gerar o documento Word.');
     } finally {
-      setIsGenerating(false);
+      setGeneratingFormat(null);
+    }
+  };
+
+  const handleGenerateVisualGuide = async () => {
+    setErrorMessage('');
+    setGeneratingFormat('visual');
+    try {
+      const blob = await generateOperatorGuideDocument({
+        mapTitle,
+        documentCode,
+        revision,
+        sector,
+        equipment,
+        preparedBy,
+        approvedBy,
+        effectiveDate,
+        includeTechnical,
+        includeTasks,
+        includeRecords,
+        includeTroubleshooting,
+        nodes,
+        edges,
+        nodeDetails,
+      });
+      downloadBlob(blob, operatorGuideFilename(mapTitle));
+    } catch (error) {
+      console.error('Error generating visual operator guide:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível gerar o guia visual em Word.');
+    } finally {
+      setGeneratingFormat(null);
     }
   };
 
@@ -205,14 +236,41 @@ export function WorkInstructionExport({
                 Campos não preenchidos no mapa não serão inventados. O Word indicará “A definir” somente nos controles obrigatórios, facilitando a revisão antes da aprovação.
               </div>
 
-              <button
-                onClick={handleGenerateWord}
-                disabled={isGenerating || !nodes.length}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 font-bold text-white shadow-lg shadow-blue-900/30 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isGenerating ? <Loader2 size={19} className="animate-spin" /> : <Download size={19} />}
-                {isGenerating ? 'Gerando documento...' : 'Gerar Word (.docx)'}
-              </button>
+              <div>
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
+                  <LayoutTemplate size={18} className="text-blue-300" /> Escolha o formato
+                </div>
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-blue-400/20 bg-blue-500/[0.06] p-4">
+                    <div className="text-sm font-bold text-blue-200">Documento oficial</div>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">Modelo atual, completo e formal para aprovação, controle documental e auditoria.</p>
+                    <button
+                      onClick={handleGenerateWord}
+                      disabled={Boolean(generatingFormat) || !nodes.length}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {generatingFormat === 'official' ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+                      {generatingFormat === 'official' ? 'Gerando modelo oficial...' : 'Gerar modelo oficial'}
+                    </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.10] to-emerald-500/[0.06] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-bold text-cyan-200">Guia visual do setor</div>
+                      <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-cyan-200">Novo</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-300">Leitura rápida para o posto, organizada em Faça, Confirme, Se NOK e Registre.</p>
+                    <button
+                      onClick={handleGenerateVisualGuide}
+                      disabled={Boolean(generatingFormat) || !nodes.length}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-950/25 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {generatingFormat === 'visual' ? <Loader2 size={18} className="animate-spin" /> : <LayoutTemplate size={18} />}
+                      {generatingFormat === 'visual' ? 'Montando guia visual...' : 'Gerar guia visual'}
+                    </button>
+                  </div>
+                </div>
+              </div>
               <p className="text-center text-xs leading-relaxed text-slate-500">Abra o arquivo no Word para revisar, aprovar e imprimir com a paginação correta.</p>
             </div>
           </aside>
