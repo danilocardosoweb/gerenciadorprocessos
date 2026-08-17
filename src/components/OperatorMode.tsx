@@ -740,6 +740,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
   const [isImageCollapsed, setIsImageCollapsed] = useState(false);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [mediaLoadError, setMediaLoadError] = useState(false);
+  const [isMediaLightboxOpen, setIsMediaLightboxOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -753,12 +754,16 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
 
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
     const childrenMap = new Map<string, string[]>();
+    const parentMap = new Map<string, string>();
 
     edges.forEach(edge => {
       if (!childrenMap.has(edge.source)) {
         childrenMap.set(edge.source, []);
       }
       childrenMap.get(edge.source)!.push(edge.target);
+      if (!parentMap.has(edge.target)) {
+        parentMap.set(edge.target, edge.source);
+      }
     });
 
     const isChild = new Set(edges.map(edge => edge.target));
@@ -766,20 +771,38 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
 
     const getChildren = (nodeId: string) => (childrenMap.get(nodeId) || []).map(id => nodeMap.get(id)).filter(Boolean) as Node[];
 
+    const collectReferenceImages = (nodeId: string) => {
+      const collected: string[] = [];
+      const visited = new Set<string>();
+      let cursor: string | undefined = nodeId;
+
+      while (cursor && !visited.has(cursor)) {
+        visited.add(cursor);
+        const localImages = pickImages(nodeDetailsMap[cursor]);
+        if (localImages.length > 0) {
+          collected.push(...localImages);
+        }
+        cursor = parentMap.get(cursor);
+      }
+
+      return normalizeMediaSources(collected).slice(0, 6);
+    };
+
     const createStep = (node: Node): OperatorStep => {
       const data = (node.data || {}) as any;
       const details = nodeDetailsMap[node.id];
       const operational = normalizeOperationalMetadata(details.operational, data);
       const checklist = buildChecklist(details, data.label, operational);
+      const referenceImages = collectReferenceImages(node.id);
       return {
         id: node.id,
         title: data.label || 'Etapa',
         description: details.description || data.description || 'Siga as instruções apresentadas nesta etapa.',
         checklist,
         rawChecklist: checklist.map(c => c.text),
-        image: pickImage(details),
-        images: pickImages(details),
-        hasVisualReference: hasVisualReference(details),
+        image: referenceImages[0] || pickImage(details),
+        images: referenceImages,
+        hasVisualReference: referenceImages.length > 0 || hasVisualReference(details),
         operational,
         severity:
           operational.riskLevel === 'high' || operational.riskLevel === 'critical' || operational.nodeTypeAdvanced === 'block' ?
@@ -840,6 +863,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
     setActiveImageIdx(0);
+    setIsMediaLightboxOpen(false);
     mainContentRef.current?.scrollTo({ top: 0 });
     leftPanelRef.current?.scrollTo({ top: 0 });
   }, [phaseIndex, stepIndex, currentStep]);
@@ -869,6 +893,23 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
   }, []);
+
+  const handleOpenMediaLightbox = useCallback((event?: React.MouseEvent) => {
+    if (!currentStep?.hasVisualReference || !activeMediaSource || mediaLoadError) return;
+    event?.preventDefault();
+    event?.stopPropagation();
+    setIsMediaLightboxOpen(true);
+  }, [activeMediaSource, currentStep?.hasVisualReference, mediaLoadError]);
+
+  const handleCloseMediaLightbox = useCallback(() => {
+    setIsMediaLightboxOpen(false);
+  }, []);
+
+  const handleMediaDoubleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleOpenMediaLightbox();
+  }, [handleOpenMediaLightbox]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (zoom <= 1) return;
@@ -1516,6 +1557,12 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                         title={currentStep.images.length < 2 ? 'Adicione duas imagens para comparar' : 'Comparar imagens'}
                       ><Layers size={11} /> Comparar</button>
                       <div className="flex-1" />
+                      <button
+                        onClick={handleOpenMediaLightbox}
+                        disabled={!currentStep.hasVisualReference || mediaLoadError}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                        title="Abrir imagem ampliada"
+                      ><Maximize2 size={11} /> Ampliar</button>
                       {/* zoom controls */}
                       <button onClick={() => handleZoom(0.5)} disabled={!currentStep.hasVisualReference} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:cursor-not-allowed disabled:opacity-30"><ZoomIn size={13} /></button>
                       <button onClick={() => handleZoom(-0.5)} disabled={zoom <= 1} className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"><ZoomOut size={13} /></button>
@@ -1531,6 +1578,7 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
                     ref={imgRef}
                     className="flex-1 relative overflow-hidden"
                     style={{ cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+                    onDoubleClick={handleMediaDoubleClick}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
@@ -1771,6 +1819,78 @@ export function OperatorMode({ mapTitle, nodes, edges, nodeDetailsMap, mode = 'o
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {isMediaLightboxOpen && activeMediaSource && !mediaLoadError && (
+          <motion.div
+            key="media-lightbox"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] bg-[#020611]/92 backdrop-blur-lg"
+            onClick={handleCloseMediaLightbox}
+          >
+            <div className="absolute inset-0 flex items-center justify-center p-6 md:p-10">
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.96, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="relative flex h-full w-full max-w-[1600px] flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#07101d] shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-4">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-amber-300">Referência visual ampliada</p>
+                    <h3 className="truncate text-lg font-black text-white">{currentStep?.title || mapTitle}</h3>
+                  </div>
+                  <button
+                    onClick={handleCloseMediaLightbox}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                    title="Fechar imagem ampliada"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="relative flex-1 bg-[#030814]">
+                  {isVideoMedia(activeMediaSource) ? (
+                    <video
+                      src={activeMediaSource}
+                      controls
+                      autoPlay
+                      className="absolute inset-0 h-full w-full object-contain"
+                    />
+                  ) : (
+                    <img
+                      src={activeMediaSource}
+                      alt={currentStep?.title || mapTitle}
+                      className="absolute inset-0 h-full w-full object-contain"
+                    />
+                  )}
+                </div>
+
+                {currentStep?.images.length > 1 && (
+                  <div className="flex items-center gap-3 overflow-x-auto border-t border-white/8 px-5 py-4">
+                    {currentStep.images.map((img, idx) => (
+                      <button
+                        key={`${img}-${idx}`}
+                        onClick={() => setActiveImageIdx(idx)}
+                        className={`h-20 w-28 shrink-0 overflow-hidden rounded-2xl border-2 transition-all ${
+                          idx === activeImageIdx ? 'border-blue-400 shadow-[0_0_0_1px_rgba(96,165,250,0.4)]' : 'border-white/10 opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={img} alt={`Miniatura ${idx + 1}`} className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* PPPPPPPPPPPPPP SEARCH MODAL PPPPPPPPPPPPPP */}
       <AnimatePresence>
         {searchOpen && (

@@ -3022,7 +3022,7 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                       className={cn(
                         'relative overflow-hidden rounded-3xl border bg-[#090f1d]/94 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl',
                         presentationFrame?.media.length
-                          ? 'w-[min(760px,calc(100vw-1.5rem))]'
+                          ? 'w-[min(980px,calc(100vw-1.5rem))]'
                           : 'w-[min(500px,calc(100vw-1.5rem))]',
                         presentationFrame?.tone === 'ok' && 'border-emerald-400/35',
                         presentationFrame?.tone === 'nok' && 'border-rose-400/40',
@@ -3071,7 +3071,32 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                           </span>
                         </div>
 
-                        <div className={cn('mt-5 grid gap-5', presentationFrame?.media.length && 'md:grid-cols-[1fr_240px]')}>
+                        <div className={cn(
+                          'mt-5 grid gap-5',
+                          presentationFrame?.media.length && (
+                            presentationFrame?.tone === 'visual'
+                              ? 'grid-cols-1'
+                              : 'xl:grid-cols-[minmax(0,1fr)_360px]'
+                          ),
+                        )}>
+                          {presentationFrame?.media[0] && presentationFrame?.tone === 'visual' && (
+                            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                              {/\.(mp4|webm|ogg)(?:$|[?#])/i.test(presentationFrame.media[0]) ? (
+                                <video
+                                  src={presentationFrame.media[0]}
+                                  controls
+                                  className="max-h-[420px] w-full object-contain"
+                                />
+                              ) : (
+                                <img
+                                  src={presentationFrame.media[0]}
+                                  alt={`Referência visual de ${presentationFrame.title}`}
+                                  className="max-h-[420px] w-full object-contain bg-[#050b15]"
+                                />
+                              )}
+                            </div>
+                          )}
+
                           <div className="min-w-0">
                             <div className="min-h-[76px] text-[15px] leading-7 text-slate-200 sm:text-base">
                               {presentationVisibleDescription}
@@ -3108,19 +3133,19 @@ function Flow({ mapId, mapTitle, onBack, currentUser, assessmentRefreshToken, pr
                             )}
                           </div>
 
-                          {presentationFrame?.media[0] && (
+                          {presentationFrame?.media[0] && presentationFrame?.tone !== 'visual' && (
                             <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
                               {/\.(mp4|webm|ogg)(?:$|[?#])/i.test(presentationFrame.media[0]) ? (
                                 <video
                                   src={presentationFrame.media[0]}
                                   controls
-                                  className="aspect-video h-full max-h-[260px] w-full object-contain"
+                                  className="aspect-video h-full max-h-[360px] w-full object-contain"
                                 />
                               ) : (
                                 <img
                                   src={presentationFrame.media[0]}
                                   alt={`Referência visual de ${presentationFrame.title}`}
-                                  className="aspect-video h-full max-h-[260px] w-full object-contain"
+                                  className="aspect-video h-full max-h-[360px] w-full object-contain bg-[#050b15]"
                                 />
                               )}
                             </div>
