@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Info, ImagePlus, Plus, CheckCircle2, Circle, UploadCloud, Trash2, MessageSquare, Link, Video, Pencil, Workflow } from 'lucide-react';
+import { X, Info, ImagePlus, Plus, CheckCircle2, Circle, UploadCloud, Trash2, MessageSquare, Link, Video, Pencil, Workflow, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useComments } from '../hooks/useComments';
 import { CommentsPanel } from './CommentsPanel';
@@ -16,6 +16,12 @@ import {
   type OperationalModeName,
   type OperationalNodeMetadata,
 } from '../lib/operationalModel';
+import {
+  deleteProcessMediaUrl,
+  normalizeMediaSource,
+  normalizeMediaSources,
+  uploadProcessMediaFiles,
+} from '../lib/processMedia';
 
 interface AttachedFile {
   id: string;
@@ -81,6 +87,7 @@ interface NodeModalProps {
 
 // Task Editor Component for managing guide, files and images per task
 interface TaskEditorProps {
+  nodeId: string;
   task: NodeTask;
   onToggle: () => void;
   onEditText: () => void;
@@ -88,12 +95,15 @@ interface TaskEditorProps {
   onUpdateTask: (task: NodeTask) => void;
 }
 
-function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: TaskEditorProps) {
+function TaskEditor({ nodeId, task, onToggle, onEditText, onDelete, onUpdateTask }: TaskEditorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'guide' | 'files' | 'images'>('guide');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const taskImageInputRef = useRef<HTMLInputElement>(null);
   const howToSteps = Array.isArray(task?.howTo) ? task.howTo : [];
   const attachedFiles = Array.isArray(task?.files) ? task.files : [];
-  const taskImages = Array.isArray(task?.images) ? task.images : [];
+  const taskImages = normalizeMediaSources(task?.images);
   const taskText = typeof task?.text === 'string' ? task.text : '';
   const guideStepsCount = howToSteps.length;
 
@@ -161,13 +171,34 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
   // Add image URL
   const addImage = () => {
     const url = prompt("URL da imagem:");
-    if (url) {
-      onUpdateTask({ ...task, images: [...taskImages, url] });
+    if (!url) return;
+    try {
+      new URL(url);
+      setImageError('');
+      onUpdateTask({ ...task, images: [...taskImages, url.trim()] });
+    } catch {
+      setImageError('Informe uma URL válida iniciada por http:// ou https://.');
+    }
+  };
+
+  const uploadTaskImages = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setIsUploadingImage(true);
+    setImageError('');
+    try {
+      const urls = await uploadProcessMediaFiles(Array.from(files), `${nodeId}-${task.id}`);
+      onUpdateTask({ ...task, images: [...taskImages, ...urls] });
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Não foi possível enviar a imagem.');
+    } finally {
+      setIsUploadingImage(false);
+      if (taskImageInputRef.current) taskImageInputRef.current.value = '';
     }
   };
 
   // Remove image
-  const removeImage = (index: number) => {
+  const removeImage = async (index: number) => {
+    void deleteProcessMediaUrl(taskImages[index]);
     onUpdateTask({
       ...task,
       images: taskImages.filter((_, i) => i !== index)
@@ -423,13 +454,32 @@ function TaskEditor({ task, onToggle, onEditText, onDelete, onUpdateTask }: Task
                   <h4 className="text-xs font-medium text-slate-300">Imagens desta ação</h4>
                   <p className="text-[10px] text-slate-500">Específicas para: {taskText.substring(0, 30)}{taskText.length > 30 ? '...' : ''}</p>
                 </div>
-                <button
-                  onClick={addImage}
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                >
-                  <Plus size={12} /> Adicionar Imagem
-                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={taskImageInputRef}
+                    type="file"
+                    multiple
+                    accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/ogg"
+                    className="hidden"
+                    onChange={(event) => void uploadTaskImages(event.target.files)}
+                  />
+                  <button
+                    onClick={() => taskImageInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {isUploadingImage ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
+                    Enviar
+                  </button>
+                  <button
+                    onClick={addImage}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  >
+                    <Link size={12} /> URL
+                  </button>
+                </div>
               </div>
+              {imageError && <p className="text-[10px] text-red-400">{imageError}</p>}
               <div className="grid grid-cols-2 gap-2">
                 {taskImages.map((img, idx) => (
                   <div key={idx} className="relative group">
@@ -490,7 +540,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
   const details: NodeDetails = {
     ...(rawDetails || {}),
     description: typeof rawDetails?.description === 'string' ? rawDetails.description : '',
-    images: Array.isArray(rawDetails?.images) ? rawDetails.images : [],
+    images: normalizeMediaSources(rawDetails?.images),
     tasks: Array.isArray(rawDetails?.tasks)
       ? rawDetails.tasks.filter(Boolean).map((task, index) => ({
           ...task,
@@ -498,7 +548,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
           text: typeof task?.text === 'string' ? task.text : `Ação ${index + 1}`,
           completed: Boolean(task?.completed),
           howTo: Array.isArray(task?.howTo) ? task.howTo.filter(Boolean) : [],
-          images: Array.isArray(task?.images) ? task.images.filter(Boolean) : [],
+          images: normalizeMediaSources(task?.images),
           files: Array.isArray(task?.files) ? task.files.filter(Boolean) : [],
         }))
       : [],
@@ -508,6 +558,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [urlError, setUrlError] = useState('');
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [mediaUploadError, setMediaUploadError] = useState('');
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [labelValue, setLabelValue] = useState(safeNodeData.label || '');
   const operational = normalizeOperationalMetadata(details.operational, safeNodeData);
@@ -601,13 +653,22 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
     }
   };
 
-  const handleFiles = (files: FileList) => {
-    const newImages = Array.from(files).map((file) => URL.createObjectURL(file));
-    const currentImages = details.images || [];
-    onUpdateDetails(nodeId, {
-      ...details,
-      images: [...currentImages, ...newImages],
-    });
+  const handleFiles = async (files: FileList) => {
+    if (!files.length || isUploadingMedia) return;
+    setIsUploadingMedia(true);
+    setMediaUploadError('');
+    try {
+      const uploadedUrls = await uploadProcessMediaFiles(Array.from(files), nodeId);
+      onUpdateDetails(nodeId, {
+        ...details,
+        images: [...normalizeMediaSources(details.images), ...uploadedUrls],
+      });
+    } catch (error) {
+      setMediaUploadError(error instanceof Error ? error.message : 'Não foi possível enviar a mídia.');
+    } finally {
+      setIsUploadingMedia(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleAddUrl = () => {
@@ -628,7 +689,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
   const isGif   = (src: string) => /\.gif$/i.test(src);
 
   const removeImage = (index: number) => {
-    const currentImages = details.images || [];
+    const currentImages = normalizeMediaSources(details.images);
+    void deleteProcessMediaUrl(currentImages[index]);
     const newImages = [...currentImages];
     newImages.splice(index, 1);
     onUpdateDetails(nodeId, { ...details, images: newImages });
@@ -1186,6 +1248,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                         details.tasks.map(task => (
                           <TaskEditor
                             key={task.id}
+                            nodeId={nodeId}
                             task={task}
                             onToggle={() => toggleTask(task.id)}
                             onEditText={() => editTask(task.id, task.text)}
@@ -1235,6 +1298,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                                 <p className="text-[10px] text-white truncate">{task.text}</p>
                                 <button
                                   onClick={() => {
+                                    void deleteProcessMediaUrl(normalizeMediaSource(img));
                                     const newImages = task.images?.filter((_, i) => i !== idx) || [];
                                     onUpdateDetails(nodeId, (prevDetails: NodeDetails) => {
                                       const currentDetails = prevDetails || details;
@@ -1276,7 +1340,8 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                   <div
                     className={cn(
                       "w-full min-h-[170px] p-5 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center transition-colors cursor-pointer",
-                      dragActive ? "border-blue-400 bg-blue-500/10" : "border-white/20 bg-white/5 hover:bg-white/10"
+                      dragActive ? "border-blue-400 bg-blue-500/10" : "border-white/20 bg-white/5 hover:bg-white/10",
+                      isUploadingMedia && "pointer-events-none opacity-70"
                     )}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
@@ -1284,8 +1349,14 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <UploadCloud size={28} className={dragActive ? "text-blue-400 mb-2" : "text-slate-400 mb-2"} />
-                    <p className="text-sm text-slate-300 font-medium mb-0.5">Arraste ou clique para enviar</p>
+                    {isUploadingMedia ? (
+                      <Loader2 size={28} className="mb-2 animate-spin text-blue-400" />
+                    ) : (
+                      <UploadCloud size={28} className={dragActive ? "text-blue-400 mb-2" : "text-slate-400 mb-2"} />
+                    )}
+                    <p className="text-sm text-slate-300 font-medium mb-0.5">
+                      {isUploadingMedia ? 'Enviando mídia...' : 'Arraste ou clique para enviar'}
+                    </p>
                     <p className="text-xs text-slate-500">PNG · JPG · GIF · MP4 · WebM</p>
                     <input
                       ref={fileInputRef}
@@ -1293,9 +1364,15 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                       multiple
                       accept="image/*,video/mp4,video/webm,video/ogg"
                       onChange={handleChange}
+                      disabled={isUploadingMedia}
                       className="hidden"
                     />
                   </div>
+                  {mediaUploadError && (
+                    <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                      {mediaUploadError}
+                    </p>
+                  )}
 
                   {/* URL input */}
                   <div className="flex flex-col gap-1.5">

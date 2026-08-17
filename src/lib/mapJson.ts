@@ -3,6 +3,7 @@ import { getLayoutedElements } from './layout';
 import type { NodeDetails } from '../components/NodeModal';
 import { normalizeOperationalMetadata } from './operationalModel';
 import { repairMojibake } from './textEncoding';
+import { normalizeMediaSources } from './processMedia';
 
 export type MapVisibility = 'public' | 'departments' | 'private';
 export type MapLayoutDirection = 'LR' | 'RL' | 'TB' | 'BT' | 'hierarchical';
@@ -203,13 +204,18 @@ const normalizeTasks = (value: any, nodeId: string, label: string) => {
 
       const text = toText(task.text, task.instruction, task.message, task.title) || `${label} - etapa ${index + 1}`;
       const taskHowTo = normalizeHowTo(task.howTo);
+      const taskImages = normalizeMediaSources([
+        ...(Array.isArray(task.images) ? task.images : task.images ? [task.images] : []),
+        ...(Array.isArray(task.imageUrls) ? task.imageUrls : task.imageUrls ? [task.imageUrls] : []),
+        ...(Array.isArray(task.evidenceImages) ? task.evidenceImages : task.evidenceImages ? [task.evidenceImages] : []),
+      ]);
       return {
         ...task,
         id: toText(task.id, `${nodeId}-task-${index + 1}`),
         text,
         completed: Boolean(task.completed),
         ...(taskHowTo ? { howTo: taskHowTo } : {}),
-        ...(Array.isArray(task.images) ? { images: toStringArray(task.images) } : {}),
+        ...(taskImages.length ? { images: taskImages } : {}),
         ...(Array.isArray(task.files) ? { files: task.files.filter(isPlainObject) } : {}),
       };
     })
@@ -223,11 +229,12 @@ const normalizeNodeDetails = (nodeId: string, rawDetails: any, nodeData: Record<
   const data = isPlainObject(nodeData) ? nodeData : {};
   const label = toText(data.label, source.title, source.name, nodeId) || nodeId;
 
-  const images = [
-    ...toStringArray(source.images),
-    ...toStringArray(source.imageUrls),
-    ...toStringArray(source.evidenceImages),
-  ];
+  const images = normalizeMediaSources([
+    ...(Array.isArray(source.images) ? source.images : source.images ? [source.images] : []),
+    ...(Array.isArray(source.imageUrls) ? source.imageUrls : source.imageUrls ? [source.imageUrls] : []),
+    ...(Array.isArray(source.evidenceImages) ? source.evidenceImages : source.evidenceImages ? [source.evidenceImages] : []),
+    ...(Array.isArray(source.media) ? source.media : source.media ? [source.media] : []),
+  ]);
 
   const description = toText(
     source.description,
