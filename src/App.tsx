@@ -388,7 +388,7 @@ const RECOVERY_V2_MAJOR_LABELS: Record<string, string> = {
   methods: 'Metodos Operacionais',
   outputs: 'Saidas',
   kpis: 'KPIs',
-  safety: 'Seguranca',
+  safety: 'Segurança',
   quality: 'Qualidade',
   compliance: 'Conformidade',
   others: 'Detalhes Complementares',

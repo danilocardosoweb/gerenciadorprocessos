@@ -101,6 +101,28 @@ const classifyItem = (text: string): ChecklistCriticality => {
   return 'required';
 };
 
+const normalizeGuideAnchor = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^\s*\d+(?:[\.\-]\d+)*\s*/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isPrimaryGuideItem = (itemText: string, fallbackLabel: string, totalItems: number) => {
+  if (totalItems <= 1) return true;
+
+  const normalizedItem = normalizeGuideAnchor(itemText || '');
+  const normalizedLabel = normalizeGuideAnchor(fallbackLabel || '');
+
+  if (!normalizedItem || !normalizedLabel) return false;
+  return normalizedItem === normalizedLabel
+    || normalizedItem.includes(normalizedLabel)
+    || normalizedLabel.includes(normalizedItem);
+};
+
 const generateItemGuide = (text: string): Partial<ChecklistItem> => {
   const lower = text.toLowerCase();
   
@@ -373,13 +395,22 @@ const buildChecklist = (
     const taskItems = details.tasks.slice(0, 6).map(buildTaskItem).filter(Boolean) as ChecklistItem[];
     if (taskItems.length > 0) {
       const firstItem = taskItems[0];
-      if ((!firstItem.howTo || firstItem.howTo.length === 0) && Array.isArray(details.howTo) && details.howTo.length > 0) {
+      if (isPrimaryGuideItem(firstItem.text, fallbackLabel, taskItems.length)) {
+        if (Array.isArray(details.howTo) && details.howTo.length > 0) {
+          firstItem.howTo = details.howTo;
+        }
+        if (details.ifOK) firstItem.ifOK = details.ifOK;
+        if (details.ifNOK) firstItem.ifNOK = details.ifNOK;
+        if (Array.isArray(details.tips) && details.tips.length > 0) {
+          firstItem.tips = details.tips;
+        }
+      } else if ((!firstItem.howTo || firstItem.howTo.length === 0) && Array.isArray(details.howTo) && details.howTo.length > 0) {
         firstItem.howTo = details.howTo;
-      }
-      if (!firstItem.ifOK && details.ifOK) firstItem.ifOK = details.ifOK;
-      if (!firstItem.ifNOK && details.ifNOK) firstItem.ifNOK = details.ifNOK;
-      if ((!firstItem.tips || firstItem.tips.length === 0) && Array.isArray(details.tips) && details.tips.length > 0) {
-        firstItem.tips = details.tips;
+        if (!firstItem.ifOK && details.ifOK) firstItem.ifOK = details.ifOK;
+        if (!firstItem.ifNOK && details.ifNOK) firstItem.ifNOK = details.ifNOK;
+        if ((!firstItem.tips || firstItem.tips.length === 0) && Array.isArray(details.tips) && details.tips.length > 0) {
+          firstItem.tips = details.tips;
+        }
       }
       return taskItems;
     }
@@ -637,7 +668,7 @@ const buildOperatorSummary = (step: OperatorStep, mode: OperationalModeName) => 
     badges.push({ label: 'Registro obrigatório', tone: 'blue' });
   }
   if (op.requiresApproval) {
-    badges.push({ label: 'Liberação necessria', tone: 'emerald' });
+    badges.push({ label: 'Liberação necessária', tone: 'emerald' });
   }
   if (isHighRisk) {
     badges.push({ label: 'Pare se houver desvio', tone: 'amber' });

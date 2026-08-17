@@ -95,17 +95,29 @@ interface TaskEditorProps {
   onUpdateTask: (task: NodeTask) => void;
 }
 
+const createGuideDraft = (task: NodeTask) => ({
+  howTo: Array.isArray(task?.howTo) ? task.howTo.map((step) => ({ ...step })) : [],
+  ifOK: task?.ifOK ? { ...task.ifOK } : undefined,
+  ifNOK: task?.ifNOK ? { ...task.ifNOK } : undefined,
+});
+
 function TaskEditor({ nodeId, task, onToggle, onEditText, onDelete, onUpdateTask }: TaskEditorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'guide' | 'files' | 'images'>('guide');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageError, setImageError] = useState('');
+  const [guideDraft, setGuideDraft] = useState(() => createGuideDraft(task));
   const taskImageInputRef = useRef<HTMLInputElement>(null);
-  const howToSteps = Array.isArray(task?.howTo) ? task.howTo : [];
+  const howToSteps = Array.isArray(guideDraft.howTo) ? guideDraft.howTo : [];
   const attachedFiles = Array.isArray(task?.files) ? task.files : [];
   const taskImages = normalizeMediaSources(task?.images);
   const taskText = typeof task?.text === 'string' ? task.text : '';
   const guideStepsCount = howToSteps.length;
+  const hasGuideChanges = JSON.stringify(guideDraft) !== JSON.stringify(createGuideDraft(task));
+
+  useEffect(() => {
+    setGuideDraft(createGuideDraft(task));
+  }, [task]);
 
   // Add howTo step
   const addHowToStep = () => {
@@ -114,32 +126,32 @@ function TaskEditor({ nodeId, task, onToggle, onEditText, onDelete, onUpdateTask
       instruction: "Nova instrução...",
       visualHint: "Dica visual..."
     };
-    onUpdateTask({
-      ...task,
-      howTo: [...howToSteps, newStep]
-    });
+    setGuideDraft((prev) => ({
+      ...prev,
+      howTo: [...howToSteps, newStep],
+    }));
   };
 
   // Update howTo step
   const updateHowToStep = (index: number, field: keyof HowToStep, value: string | number) => {
     const newHowTo = [...howToSteps];
     newHowTo[index] = { ...newHowTo[index], [field]: value };
-    onUpdateTask({ ...task, howTo: newHowTo });
+    setGuideDraft((prev) => ({ ...prev, howTo: newHowTo }));
   };
 
   // Remove howTo step
   const removeHowToStep = (index: number) => {
     const newHowTo = howToSteps.filter((_, i) => i !== index)
       .map((step, i) => ({ ...step, order: i + 1 }));
-    onUpdateTask({ ...task, howTo: newHowTo });
+    setGuideDraft((prev) => ({ ...prev, howTo: newHowTo }));
   };
 
   // Update flow outcome (ifOK/ifNOK)
   const updateFlowOutcome = (type: 'ifOK' | 'ifNOK', field: keyof FlowOutcome, value: string) => {
-    onUpdateTask({
-      ...task,
-      [type]: { ...(task[type] || {}), [field]: value }
-    });
+    setGuideDraft((prev) => ({
+      ...prev,
+      [type]: { ...((prev[type] as FlowOutcome | undefined) || {}), [field]: value },
+    }));
   };
 
   // Add file
@@ -210,8 +222,22 @@ function TaskEditor({ nodeId, task, onToggle, onEditText, onDelete, onUpdateTask
   const hasImages = taskImages.length > 0;
 
   const openGuideEditor = () => {
+    setGuideDraft(createGuideDraft(task));
     setIsExpanded(true);
     setActiveTab('guide');
+  };
+
+  const saveGuideChanges = () => {
+    onUpdateTask({
+      ...task,
+      howTo: guideDraft.howTo,
+      ifOK: guideDraft.ifOK,
+      ifNOK: guideDraft.ifNOK,
+    });
+  };
+
+  const cancelGuideChanges = () => {
+    setGuideDraft(createGuideDraft(task));
   };
 
 
@@ -315,6 +341,28 @@ function TaskEditor({ nodeId, task, onToggle, onEditText, onDelete, onUpdateTask
           {/* Guide Tab */}
           {activeTab === 'guide' && (
             <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-500/15 bg-blue-500/[0.05] px-3 py-2">
+                <p className="text-[11px] text-slate-400">
+                  {hasGuideChanges ? 'Existem alterações pendentes neste guia.' : 'As informações abaixo já estão sincronizadas com o mapa.'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={cancelGuideChanges}
+                    disabled={!hasGuideChanges}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 border border-white/10 hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={saveGuideChanges}
+                    disabled={!hasGuideChanges}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Salvar alterações
+                  </button>
+                </div>
+              </div>
+
               {/* How To Steps */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -360,21 +408,21 @@ function TaskEditor({ nodeId, task, onToggle, onEditText, onDelete, onUpdateTask
                 <h4 className="text-xs font-medium text-emerald-300"> Se OK (Quando der certo)</h4>
                 <input
                   type="text"
-                  value={task.ifOK?.result || ''}
+                  value={guideDraft.ifOK?.result || ''}
                   onChange={(e) => updateFlowOutcome('ifOK', 'result', e.target.value)}
                   className="w-full text-xs bg-transparent border-b border-emerald-500/30 focus:border-emerald-400 outline-none text-slate-200"
                   placeholder="Resultado esperado..."
                 />
                 <input
                   type="text"
-                  value={task.ifOK?.action || ''}
+                  value={guideDraft.ifOK?.action || ''}
                   onChange={(e) => updateFlowOutcome('ifOK', 'action', e.target.value)}
                   className="w-full text-xs bg-transparent border-b border-emerald-500/30 focus:border-emerald-400 outline-none text-slate-200"
                   placeholder="Ação a tomar..."
                 />
                 <input
                   type="text"
-                  value={task.ifOK?.nextStep || ''}
+                  value={guideDraft.ifOK?.nextStep || ''}
                   onChange={(e) => updateFlowOutcome('ifOK', 'nextStep', e.target.value)}
                   className="w-full text-xs bg-transparent border-b border-emerald-500/30 focus:border-emerald-400 outline-none text-slate-300"
                   placeholder="Próximo passo..."
@@ -386,21 +434,21 @@ function TaskEditor({ nodeId, task, onToggle, onEditText, onDelete, onUpdateTask
                 <h4 className="text-xs font-medium text-red-300">Se NOK (Quando der errado)</h4>
                 <input
                   type="text"
-                  value={task.ifNOK?.result || ''}
+                  value={guideDraft.ifNOK?.result || ''}
                   onChange={(e) => updateFlowOutcome('ifNOK', 'result', e.target.value)}
                   className="w-full text-xs bg-transparent border-b border-red-500/30 focus:border-red-400 outline-none text-slate-200"
                   placeholder="Resultado quando der errado..."
                 />
                 <input
                   type="text"
-                  value={task.ifNOK?.action || ''}
+                  value={guideDraft.ifNOK?.action || ''}
                   onChange={(e) => updateFlowOutcome('ifNOK', 'action', e.target.value)}
                   className="w-full text-xs bg-transparent border-b border-red-500/30 focus:border-red-400 outline-none text-slate-200"
                   placeholder="Ação corretiva..."
                 />
                 <input
                   type="text"
-                  value={task.ifNOK?.nextStep || ''}
+                  value={guideDraft.ifNOK?.nextStep || ''}
                   onChange={(e) => updateFlowOutcome('ifNOK', 'nextStep', e.target.value)}
                   className="w-full text-xs bg-transparent border-b border-red-500/30 focus:border-red-400 outline-none text-slate-300"
                   placeholder="O que fazer agora..."
@@ -534,6 +582,30 @@ function OperationalListEditor({
     </div>
   );
 }
+
+const normalizeGuideAnchor = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^\s*\d+(?:[\.\-]\d+)*\s*/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isPrimaryGuideTask = (task: NodeTask, nodeLabel: string, allTasks: NodeTask[]) => {
+  if (!task) return false;
+  if (allTasks.length <= 1) return true;
+  if (typeof task.id === 'string' && task.id.startsWith('root-task')) return true;
+
+  const normalizedTask = normalizeGuideAnchor(task.text || '');
+  const normalizedLabel = normalizeGuideAnchor(nodeLabel || '');
+
+  if (!normalizedTask || !normalizedLabel) return false;
+  return normalizedTask === normalizedLabel
+    || normalizedTask.includes(normalizedLabel)
+    || normalizedLabel.includes(normalizedTask);
+};
 
 export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetails, onUpdateDetails, onUpdateNodeLabel, currentUser, suggestionCorpus = [], writingSuggestionsEnabled = true, onWritingSuggestionsEnabledChange }: NodeModalProps) {
   const safeNodeData = nodeData || {};
@@ -1190,7 +1262,7 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                           onChange={(value) => updateTroubleshooting('whoToCall', value)}
                         />
                         <OperationalListEditor
-                          label="Evidáncia obrigatória"
+                          label="Evidência obrigatória"
                           value={operational.troubleshooting.requiredEvidence}
                           placeholder="Ex: foto da falha&#10;peça segregada identificada"
                           onChange={(value) => updateTroubleshooting('requiredEvidence', value)}
@@ -1259,7 +1331,18 @@ export function NodeModal({ isOpen, onClose, nodeData, nodeId, details: rawDetai
                                 const currentDetails = prevDetails || details;
                                 const currentTasks = Array.isArray(currentDetails.tasks) ? currentDetails.tasks : [];
                                 const newTasks = currentTasks.map(t => t.id === task.id ? updatedTask : t);
-                                return { ...currentDetails, tasks: newTasks };
+                                if (!isPrimaryGuideTask(updatedTask, safeNodeData.label || '', currentTasks)) {
+                                  return { ...currentDetails, tasks: newTasks };
+                                }
+
+                                return {
+                                  ...currentDetails,
+                                  tasks: newTasks,
+                                  howTo: Array.isArray(updatedTask.howTo) ? updatedTask.howTo : currentDetails.howTo,
+                                  ifOK: updatedTask.ifOK || currentDetails.ifOK,
+                                  ifNOK: updatedTask.ifNOK || currentDetails.ifNOK,
+                                  tips: Array.isArray(updatedTask.tips) ? updatedTask.tips : currentDetails.tips,
+                                };
                               });
                             }}
                           />

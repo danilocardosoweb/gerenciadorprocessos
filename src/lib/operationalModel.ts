@@ -640,7 +640,7 @@ export function buildOperationalBadges(metadata: OperationalNodeMetadata) {
   const badges: Array<{ label: string; tone: string }> = [];
   if (metadata.ctq) badges.push({ label: 'CTQ', tone: 'violet' });
   if (metadata.auditRequired) badges.push({ label: 'Auditoria', tone: 'cyan' });
-  if (metadata.requiresEvidence) badges.push({ label: 'Evidáncia', tone: 'blue' });
+  if (metadata.requiresEvidence) badges.push({ label: 'Evidência', tone: 'blue' });
   if (metadata.requiresApproval) badges.push({ label: 'Aprovação', tone: 'emerald' });
   if (getRiskWeight(metadata.riskLevel) >= 2) badges.push({ label: `Risco ${metadata.riskLevel}`, tone: 'amber' });
   return badges;

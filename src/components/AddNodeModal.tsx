@@ -37,7 +37,7 @@ const categories = [
   { id: 'methods', label: 'Métodos' },
   { id: 'kpis', label: 'Indicadores' },
   { id: 'quality', label: 'Qualidade' },
-  { id: 'safety', label: 'Seguranca' },
+  { id: 'safety', label: 'Segurança' },
   { id: 'alerts', label: 'Alertas' },
   { id: 'compliance', label: 'Conformidade' },
 ];
@@ -317,8 +317,8 @@ export function AddNodeModal({ isOpen, onClose, onAdd, nodes = [], edges = [], s
                     {[
                       { label: 'CTQ', value: ctq, setValue: setCtq },
                       { label: 'Auditoria', value: auditRequired, setValue: setAuditRequired },
-                      { label: 'Evidencia', value: requiresEvidence, setValue: setRequiresEvidence },
-                      { label: 'Aprovacao', value: requiresApproval, setValue: setRequiresApproval },
+                      { label: 'Evidência', value: requiresEvidence, setValue: setRequiresEvidence },
+                      { label: 'Aprovação', value: requiresApproval, setValue: setRequiresApproval },
                     ].map((item) => (
                       <button
                         key={item.label}
